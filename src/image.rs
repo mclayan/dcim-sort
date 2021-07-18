@@ -145,6 +145,27 @@ impl ImgMeta {
         }
     }
 
+    pub fn created_at(&self) -> Option<&DateTime<Local>> {
+        if let Some(ts) = &self.created_at {
+            Some(ts)
+        }
+        else {
+            None
+        }
+    }
+    pub fn make(&self) -> &str {
+        &self.make
+    }
+    pub fn model(&self) -> &str {
+        &self.model
+    }
+    pub fn user_comment(&self) -> &str {
+        &self.user_comment
+    }
+    pub fn is_screenshot(&self) -> bool {
+        self.is_screenshot
+    }
+
     fn parse_datetime(val: &exif::Value) -> Option<DateTime<Local>> {
         match val {
             Value::Ascii(values ) => {
