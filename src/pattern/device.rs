@@ -18,6 +18,7 @@ pub struct MakeModelPattern {
     separator: char,
     case: CaseNormalization,
     replace_spaces: bool,
+    fallback: String,
     default_make: String,
     default_model: String
 }
@@ -29,6 +30,7 @@ impl MakeModelPattern {
             separator: '_',
             case: CaseNormalization::Lowercase,
             replace_spaces: true,
+            fallback: String::new(),
             default_make: String::from("unknown"),
             default_model: String::from("unknown")
         }
@@ -69,17 +71,21 @@ impl PatternElement for MakeModelPattern {
         }
 
         let mut result = String::new();
-        let mut first = true;
-        for p in &self.pattern {
-            if first {
-                first = false;
-            }
-            else {
-                result.push(self.separator);
-            }
-            match p {
-                DevicePart::Model => result.push_str(&model),
-                DevicePart::Make => result.push_str(&make)
+        if make == self.default_make && model == self.default_model && !self.fallback.is_empty() {
+            result = self.fallback.clone();
+        }
+        else {
+            let mut first = true;
+            for p in &self.pattern {
+                if first {
+                    first = false;
+                } else {
+                    result.push(self.separator);
+                }
+                match p {
+                    DevicePart::Model => result.push_str(&model),
+                    DevicePart::Make => result.push_str(&make)
+                }
             }
         }
         Some(result)
@@ -91,6 +97,7 @@ pub struct MakeModelPatternBuilder {
     separator: char,
     case: CaseNormalization,
     replace_spaces: bool,
+    fallback: String,
     default_make: String,
     default_model: String
 }
@@ -126,6 +133,11 @@ impl MakeModelPatternBuilder {
         self
     }
 
+    pub fn fallback(mut self, fallback: String) -> MakeModelPatternBuilder {
+        self.fallback = fallback;
+        self
+    }
+
     pub fn build(mut self) -> Box<dyn PatternElement> {
         if self.pattern.len() < 1 {
             self.pattern.push(DevicePart::Make);
@@ -136,6 +148,7 @@ impl MakeModelPatternBuilder {
             separator: self.separator,
             case: self.case,
             replace_spaces: self.replace_spaces,
+            fallback: self.fallback,
             default_make: self.default_make,
             default_model: self.default_model
         })

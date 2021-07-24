@@ -35,6 +35,7 @@ fn main() {
             .separator('_')
             .replace_spaces(true)
             .case_normalization(CaseNormalization::Lowercase)
+            .fallback(String::from("unknown_device"))
             .build())
         .segment(ScreenshotPattern::new(String::from("screenshots")))
         .segment(DateTimePattern::new()
