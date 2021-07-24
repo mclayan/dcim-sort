@@ -1,7 +1,7 @@
 use crate::pattern::PatternElement;
-use crate::image::ImgInfo;
 use chrono::{DateTime, Local, Datelike, Timelike};
 use crate::main;
+use crate::media::ImgInfo;
 
 pub struct ScreenshotPattern {
     segment_name: String,
@@ -21,16 +21,12 @@ impl PatternElement for ScreenshotPattern {
     }
 
     fn translate(&self, info: &ImgInfo) -> Option<String> {
-        match info.metadata() {
-            Some(m) => {
-                if m.is_screenshot() {
-                    Some(self.segment_name.clone())
-                }
-                else {
-                    None
-                }
-            }
-            None => None
+        let m = info.metadata();
+        if m.is_screenshot() {
+            Some(self.segment_name.clone())
+        }
+        else {
+            None
         }
     }
 }
@@ -105,8 +101,8 @@ impl PatternElement for DateTimePattern {
     }
 
     fn translate(&self, info: &ImgInfo) -> Option<String> {
-        let timestamp : Option<&DateTime<Local>> = match info.metadata() {
-            Some(meta) => meta.created_at(),
+        let timestamp : Option<&DateTime<Local>> = match info.metadata().created_at() {
+            Some(ts) => Some(ts),
             None => {
                 if self.fs_timestamp_fallback {
                     Some(info.changed_at())

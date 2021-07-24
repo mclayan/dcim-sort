@@ -1,5 +1,5 @@
-use crate::image::ImgInfo;
 use std::fmt::Formatter;
+use crate::media::ImgInfo;
 
 pub mod general;
 pub mod device;

@@ -1,14 +1,17 @@
-mod image;
 mod index;
 mod sorting;
 mod pattern;
+mod media;
 
 use clap::{App, Arg};
 use std::path::PathBuf;
 use crate::index::Scanner;
-use crate::sorting::Sorter;
+use crate::sorting::{Sorter, Strategy};
 use crate::pattern::device::{MakeModelPattern, DevicePart, CaseNormalization};
 use crate::pattern::general::{ScreenshotPattern, DateTimePattern, DateTimePart};
+use crate::media::metadata_processor::MetaProcessor;
+use crate::media::rexiv_proc::Rexiv2Processor;
+use crate::media::FileMetaProcessor;
 
 struct MArgs {
     files: Vec<String>,
@@ -37,15 +40,24 @@ fn main() {
         .segment(DateTimePattern::new()
             .part(DateTimePart::Year)
             .part(DateTimePart::Month)
-            .part(DateTimePart::Day)
             .build())
+        .build();
+
+    let meta_processor = MetaProcessor::new()
+        .processor(Rexiv2Processor::new())
         .build();
 
     for file in args.files {
         println!("Processing file: {}", &file);
         let mut scanner = Scanner::new(file).unwrap();
         scanner.debug(args.debug > 1);
-        let children = scanner.scan();
+
+        let mut children = scanner.scan();
+
+        children = meta_processor.process_all(children);
+
+        sorter.sort_all(&children, Strategy::Copy);
+        /*
         for child in children {
             let new_path = sorter.translate(&child);
             if args.debug > 0 {
@@ -59,6 +71,7 @@ fn main() {
             }
 
         }
+         */
 
     }
 }

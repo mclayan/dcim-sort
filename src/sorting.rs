@@ -1,9 +1,10 @@
 use std::fmt::Formatter;
-use crate::image::{ImgMeta, ImgInfo};
 use crate::pattern::{PatternElement, SortingError};
 use std::path::{PathBuf, Path};
 use std::fs::{File, read_dir};
+use crate::media::{ImgInfo, ImgMeta, FileMetaProcessor};
 
+#[derive(Clone, Copy)]
 pub enum Strategy {
     Copy,
     Move
@@ -25,6 +26,9 @@ pub struct Sorter {
     dup_handling: DuplicateResolution,
     target_root: PathBuf,
     duplicate_counter: u64,
+    skipped_files: u64,
+    sorted_files: u64,
+    created_dirs: u64,
 }
 
 pub struct SorterBuilder {
@@ -50,6 +54,9 @@ impl SorterBuilder {
             dup_handling: self.dup_handling,
             target_root: self.target_root,
             duplicate_counter: 0,
+            skipped_files: 0,
+            sorted_files: 0,
+            created_dirs: 0
         }
     }
 }
@@ -60,6 +67,12 @@ impl Sorter {
             segments: Vec::new(),
             dup_handling: DuplicateResolution::Compare(Comparison::Rename),
             target_root: target_dir.clone(),
+        }
+    }
+
+    pub fn sort_all(&mut self, index: &Vec<ImgInfo>, strategy: Strategy) {
+        for info in index {
+            self.sort(info, strategy);
         }
     }
 
@@ -103,19 +116,40 @@ impl Sorter {
         };
 
         if do_execute {
-            match strategy {
-                Strategy::Copy => { Sorter::copy_file(target, img.path()) },
-                Strategy::Move => { Sorter::move_file(target, img.path() )}
+            if !destination.exists() {
+                println!("mkdir: {}", destination.to_str().unwrap_or("INVALID_UTF-8"));
+                match std::fs::create_dir_all(destination) {
+                    Err(e) => {
+                        println!("Failed to create destination directory: {}", e);
+                        return;
+                    }
+                    Ok(_) => { self.created_dirs += 1 }
+                }
             }
+            let result = match strategy {
+                Strategy::Copy => { Sorter::copy_file(target.as_path(), img.path()) },
+                Strategy::Move => { Sorter::move_file(target, img.path() )}
+            };
+            match result {
+                Ok(_) => { self.sorted_files += 1; },
+                Err(e) => {
+                    eprintln!("Error sorting file {}: {}", img.path().to_str().unwrap_or("INVALID_UTF-8"), e);
+                }
+            }
+
+        }
+        else {
+            self.skipped_files += 1;
         }
     }
 
-    fn move_file(dest: PathBuf, source: &Path) {
+    fn move_file(dest: PathBuf, source: &Path) -> std::io::Result<u64> {
         todo!()
     }
 
-    fn copy_file(dest: PathBuf, source: &Path) {
-        std::fs::copy()
+    fn copy_file(dest: &Path, source: &Path) -> std::io::Result<u64> {
+        let result = std::fs::copy(source, dest);
+        result
     }
 
     pub fn translate(&mut self, img: &ImgInfo) -> PathBuf {
@@ -134,9 +168,13 @@ impl Sorter {
         let file1 = File::open(f1).expect("Could not open file!");
         let file2 = File::open(f2).expect("Could not open file!");
 
-        let s1 = file1.metadata().expect("Failed to read metadata!").len();
-        let s2 = file2.metadata().expect("Failed to read metadata!").len();
-        s1 == s2
+        let m1 = file1.metadata().expect("Failed to read metadata!");
+        let m2 = file2.metadata().expect("Failed to read metadata!");
+
+        let d1 = m1.modified().expect("Failed to read modified time!");
+        let d2 = m2.modified().expect("Failed to read modified time!");
+
+        d1 == d2 && m1.len() == m2.len()
 
         // todo: calculate checksum for comparison if sizes match
     }

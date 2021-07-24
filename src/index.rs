@@ -1,9 +1,9 @@
-use crate::image::{ImgInfo};
 use std::io::{Error, ErrorKind};
 use std::path::{Path, PathBuf};
 use std::panic::panic_any;
 use crate::index::PathBox::Directory;
 use chrono::Local;
+use crate::media::ImgInfo;
 
 pub enum PathBox {
     Directory(PathBuf),

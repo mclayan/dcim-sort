@@ -1,6 +1,6 @@
 use crate::pattern::{PatternInitError, PatternElement};
-use crate::image::ImgInfo;
 use std::borrow::Borrow;
+use crate::media::ImgInfo;
 
 pub enum DevicePart {
     Make,
@@ -50,19 +50,18 @@ impl PatternElement for MakeModelPattern {
 
     fn translate(&self, info: &ImgInfo) -> Option<String> {
         let (mut model, mut make) : (String, String);
-        if let Some(meta) = info.metadata() {
-            make = match meta.make() {
-                "" => self.default_make.clone(),
-                _s => String::from(_s)
-            };
-            model = match meta.model() {
-                "" => self.default_model.clone(),
-                _s => String::from(_s)
-            };
-            if self.replace_spaces {
-                make = make.replace(' ', "-");
-                model = model.replace(' ', "-");
-            }
+        let meta = info.metadata();
+        make = match meta.make() {
+            "" => self.default_make.clone(),
+            _s => String::from(_s)
+        };
+        model = match meta.model() {
+            "" => self.default_model.clone(),
+            _s => String::from(_s)
+        };
+        if self.replace_spaces {
+            make = make.replace(' ', "-");
+            model = model.replace(' ', "-");
         }
         else {
             make = self.default_make.clone();
