@@ -8,18 +8,6 @@ pub mod kadamak_exif;
 pub mod metadata_processor;
 pub mod rexiv_proc;
 
-pub enum MetaType {
-    Exif,
-    XMP,
-    None
-}
-
-
-pub trait FileMetaProcessor {
-    fn supports(&self, t: &MetaType) -> bool;
-    fn read_metadata(&self, file: &Path) -> Option<ImgMeta>;
-}
-
 #[derive(Debug)]
 pub enum FileType {
     JPEG,
@@ -27,6 +15,22 @@ pub enum FileType {
     HEIC,
     Other
 }
+pub enum MetaType {
+    Exif,
+    XMP,
+    None
+}
+pub struct FileMetaType {
+    file: FileType,
+    meta: MetaType
+}
+
+pub trait FileMetaProcessor {
+    fn supports(&self, mt: &MetaType, ft: &FileType) -> bool;
+    fn read_metadata(&self, file: &Path) -> Option<ImgMeta>;
+}
+
+
 
 #[derive(Debug)]
 pub struct ImgInfo {

@@ -1,9 +1,7 @@
 use std::io::{Error, ErrorKind};
-use std::path::{Path, PathBuf};
-use std::panic::panic_any;
+use std::path::{PathBuf};
 use crate::index::PathBox::Directory;
-use chrono::Local;
-use crate::media::ImgInfo;
+use crate::media::{ImgInfo, FileType};
 
 pub enum PathBox {
     Directory(PathBuf),
@@ -24,7 +22,8 @@ pub struct Scanner {
     entry_point: String,
     max_depth: u8,
     depth: u8,
-    debug: bool
+    debug: bool,
+    ignore_unknown_types: bool
 }
 
 impl Scanner {
@@ -38,13 +37,18 @@ impl Scanner {
                 entry_point: root_path,
                 max_depth: 10,
                 depth: 0,
-                debug: false
+                debug: false,
+                ignore_unknown_types: false
             })
         }
     }
 
     pub fn debug(&mut self, b: bool) {
         self.debug = b;
+    }
+
+    pub fn ignore_unknown_types(&mut self, b: bool) {
+        self.ignore_unknown_types = b;
     }
 
     pub fn set_max_depth(&mut self, max: u8) {
@@ -74,7 +78,17 @@ impl Scanner {
         match d {
             PathBox::File(f) => {
                 match ImgInfo::new(f) {
-                    Ok(i) => index.push(i),
+                    Ok(i) => {
+                        if self.ignore_unknown_types {
+                            match i.file_type() {
+                                FileType::Other => {},
+                                _ => { index.push(i); },
+                            }
+                        }
+                        else {
+                            index.push(i);
+                        }
+                    },
                     Err(e) => println!("Error processing file: {}", e)
                 }
             },

@@ -1,7 +1,6 @@
-use std::fmt::Formatter;
-use crate::pattern::{PatternElement, SortingError};
+use crate::pattern::{PatternElement};
 use std::path::{PathBuf, Path};
-use std::fs::{File, read_dir};
+use std::fs::{File};
 use crate::media::{ImgInfo, ImgMeta, FileMetaProcessor};
 
 #[derive(Clone, Copy)]

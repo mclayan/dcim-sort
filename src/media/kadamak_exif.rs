@@ -1,4 +1,4 @@
-use crate::media::{FileMetaProcessor, MetaType, ImgInfo, ImgMeta, TagParseError};
+use crate::media::{FileMetaProcessor, MetaType, ImgInfo, ImgMeta, TagParseError, FileType};
 use std::path::{PathBuf, Path};
 use std::fs;
 use std::io::BufReader;
@@ -10,15 +10,20 @@ pub struct KadamakExifProcessor {
 }
 
 impl FileMetaProcessor for KadamakExifProcessor {
-    fn supports(&self, file: &MetaType) -> bool {
-        match file {
-            MetaType::Exif => true,
+    fn supports(&self, mt: &MetaType, ft: &FileType) -> bool {
+        match ft {
+            FileType::JPEG | FileType::PNG | FileType::HEIC => {
+                match mt {
+                    MetaType::Exif => true,
+                    _ => false
+                }
+            }
             _ => false
         }
     }
 
     fn read_metadata(&self, file: &Path) -> Option<ImgMeta> {
-        self.read_metadata(file)
+        Self::read_meta_exif(file)
     }
 }
 

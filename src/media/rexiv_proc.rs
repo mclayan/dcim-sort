@@ -1,4 +1,4 @@
-use crate::media::{FileMetaProcessor, MetaType, ImgMeta};
+use crate::media::{FileMetaProcessor, MetaType, ImgMeta, FileType};
 use std::path::Path;
 use rexiv2::Metadata;
 use chrono::{DateTime, Local, TimeZone, NaiveDateTime};
@@ -19,10 +19,15 @@ pub struct Rexiv2Processor { }
 
 impl FileMetaProcessor for Rexiv2Processor {
 
-    fn supports(&self, t: &MetaType) -> bool {
-        match t {
-            MetaType::Exif => true,
-            MetaType::XMP => true,
+    fn supports(&self, mt: &MetaType, ft: &FileType) -> bool {
+        // HEIF formats are not supported yet
+        match ft {
+            FileType::JPEG | FileType::PNG => {
+                match mt {
+                    MetaType::Exif | MetaType::XMP => true,
+                    _ => false
+                }
+            },
             _ => false
         }
     }
@@ -117,6 +122,21 @@ impl Rexiv2Processor {
         }
         else {
             None
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+
+    mod supports {
+        use crate::media::rexiv_proc::Rexiv2Processor;
+        use crate::media::{MetaType, FileType};
+
+        #[test]
+        fn decline_heif() {
+            let flag = Rexiv2Processor::new().supports(&MetaType::Exif, &FileType::HEIC);
+            assert!(!flag);
         }
     }
 }

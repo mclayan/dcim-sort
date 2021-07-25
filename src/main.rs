@@ -9,15 +9,17 @@ use crate::index::Scanner;
 use crate::sorting::{Sorter, Strategy};
 use crate::pattern::device::{MakeModelPattern, DevicePart, CaseNormalization};
 use crate::pattern::general::{ScreenshotPattern, DateTimePattern, DateTimePart};
-use crate::media::metadata_processor::MetaProcessor;
+use crate::media::metadata_processor::{MetaProcessor, Priority};
 use crate::media::rexiv_proc::Rexiv2Processor;
 use crate::media::FileMetaProcessor;
+use crate::media::kadamak_exif::KadamakExifProcessor;
 
 struct MArgs {
     files: Vec<String>,
     target_root: String,
     max_recursion: u8,
     debug: u64,
+    ignore_unknown_types: bool
 }
 
 fn main() {
@@ -45,34 +47,21 @@ fn main() {
         .build();
 
     let meta_processor = MetaProcessor::new()
-        .processor(Rexiv2Processor::new())
+        .processor(Rexiv2Processor::new(), Priority::None)
+        .processor(KadamakExifProcessor::new(), Priority::Lowest)
         .build();
 
     for file in args.files {
         println!("Processing file: {}", &file);
         let mut scanner = Scanner::new(file).unwrap();
         scanner.debug(args.debug > 1);
+        scanner.ignore_unknown_types(args.ignore_unknown_types);
 
         let mut children = scanner.scan();
 
         children = meta_processor.process_all(children);
 
         sorter.sort_all(&children, Strategy::Copy);
-        /*
-        for child in children {
-            let new_path = sorter.translate(&child);
-            if args.debug > 0 {
-                let path_old = child.path().to_str().unwrap_or("INVALID_UTF8");
-                let path_new = new_path.to_str().unwrap_or("INVALID_UTF8");
-                println!("===[ {} ]===\ntarget={}", path_old, path_new);
-                if args.debug > 1 {
-                    println!("{:#?}", child);
-                }
-                println!();
-            }
-
-        }
-         */
 
     }
 }
@@ -82,6 +71,7 @@ fn parse_args() -> MArgs {
     let name_infile = "FILE";
     let name_max_recursion = "max-recursion";
     let name_debug = "debug";
+    let name_ignore_ftype = "ignore-other-types";
 
     let matches = App::new("dcim-sort - sort images from DCIM folders")
         .version("0.1.0")
@@ -112,6 +102,11 @@ fn parse_args() -> MArgs {
             .short('d')
             .about("show debug messages")
             .takes_value(false))
+        .arg(Arg::new(name_ignore_ftype)
+            .about("ignore unknown file types (based on file ending)")
+            .short('i')
+            .long("ignore-unknown")
+            .required(false))
         .get_matches();
 
     let inp_files = matches.values_of(name_infile).unwrap();
@@ -123,11 +118,13 @@ fn parse_args() -> MArgs {
 
     let max_recursion: u8 = matches.value_of_t_or_exit(name_max_recursion);
     let debug = matches.occurrences_of(name_debug);
+    let ignore_unknown = matches.is_present(name_ignore_ftype);
 
     MArgs {
         files,
         target_root: String::from(output_dir),
         max_recursion,
         debug,
+        ignore_unknown_types: ignore_unknown
     }
 }
