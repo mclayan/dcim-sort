@@ -1,7 +1,7 @@
 use crate::pattern::{PatternElement};
 use std::path::{PathBuf, Path};
 use std::fs::{File};
-use crate::media::{ImgInfo, ImgMeta, FileMetaProcessor};
+use crate::media::{ImgInfo, ImgMeta, FileMetaProcessor, FileType};
 
 #[derive(Clone, Copy)]
 pub enum Strategy {
@@ -22,6 +22,7 @@ pub enum DuplicateResolution {
 
 pub struct Sorter {
     segments: Vec<Box<dyn PatternElement>>,
+    fallback_segments: Vec<Box<dyn PatternElement>>,
     dup_handling: DuplicateResolution,
     target_root: PathBuf,
     duplicate_counter: u64,
@@ -32,16 +33,28 @@ pub struct Sorter {
 
 pub struct SorterBuilder {
     segments: Vec<Box<dyn PatternElement>>,
+    fallback_segments: Vec<Box<dyn PatternElement>>,
     dup_handling: DuplicateResolution,
     target_root: PathBuf,
 }
 
 impl SorterBuilder {
+    /// Add a segment pattern to the internal vec of segments for sorting
+    /// files with supported metadata.
     pub fn segment(mut self, s: Box<dyn PatternElement>) -> SorterBuilder {
         self.segments.push(s);
         self
     }
 
+    /// Add a segment pattern to the internal vec of segments for sorting
+    /// files without supported metadata.
+    pub fn fallback(mut self, s: Box<dyn PatternElement>) -> SorterBuilder {
+        self.fallback_segments.push(s);
+        self
+    }
+
+    /// set how files already existing in the target directory with the
+    /// same name should be handled.
     pub fn duplicate_handling(mut self, a: DuplicateResolution) -> SorterBuilder {
         self.dup_handling = a;
         self
@@ -50,6 +63,7 @@ impl SorterBuilder {
     pub fn build(self) -> Sorter {
         Sorter {
             segments: self.segments,
+            fallback_segments: self.fallback_segments,
             dup_handling: self.dup_handling,
             target_root: self.target_root,
             duplicate_counter: 0,
@@ -64,6 +78,7 @@ impl Sorter {
     pub fn new(target_dir: PathBuf) -> SorterBuilder {
         SorterBuilder {
             segments: Vec::new(),
+            fallback_segments: Vec::new(),
             dup_handling: DuplicateResolution::Compare(Comparison::Rename),
             target_root: target_dir.clone(),
         }
@@ -142,8 +157,9 @@ impl Sorter {
         }
     }
 
-    fn move_file(dest: PathBuf, source: &Path) -> std::io::Result<u64> {
-        todo!()
+    fn move_file(dest: PathBuf, source: &Path) -> std::io::Result<()> {
+        let result = std::fs::rename(source, dest);
+        result
     }
 
     fn copy_file(dest: &Path, source: &Path) -> std::io::Result<u64> {
@@ -153,7 +169,23 @@ impl Sorter {
 
     pub fn translate(&mut self, img: &ImgInfo) -> PathBuf {
         let mut dest = self.target_root.clone();
+        match img.file_type() {
+            FileType::Other => { self.translate_unsupported(img, dest) },
+            _ =>               { self.translate_supported(img, dest)   },
+        }
+    }
+
+    fn translate_supported(&mut self, img: &ImgInfo, mut dest: PathBuf) -> PathBuf {
         for pattern in &self.segments {
+            if let Some(seg_str) = pattern.translate(img) {
+                dest.push(seg_str);
+            }
+        }
+        dest
+    }
+
+    fn translate_unsupported(&mut self, img: &ImgInfo, mut dest: PathBuf) -> PathBuf {
+        for pattern in &self.fallback_segments {
             if let Some(seg_str) = pattern.translate(img) {
                 dest.push(seg_str);
             }

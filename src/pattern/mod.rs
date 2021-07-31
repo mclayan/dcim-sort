@@ -3,6 +3,7 @@ use crate::media::ImgInfo;
 
 pub mod general;
 pub mod device;
+pub mod fallback;
 
 pub trait PatternElement {
     fn is_optional(&self) -> bool;

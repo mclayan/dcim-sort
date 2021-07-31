@@ -9,6 +9,7 @@ use crate::index::Scanner;
 use crate::sorting::{Sorter, Strategy};
 use crate::pattern::device::{MakeModelPattern, DevicePart, CaseNormalization};
 use crate::pattern::general::{ScreenshotPattern, DateTimePattern, DateTimePart};
+use crate::pattern::fallback::{SimpleFileTypePattern};
 use crate::media::metadata_processor::{MetaProcessor, Priority};
 use crate::media::rexiv_proc::Rexiv2Processor;
 use crate::media::FileMetaProcessor;
@@ -44,6 +45,7 @@ fn main() {
             .part(DateTimePart::Year)
             .part(DateTimePart::Month)
             .build())
+        .fallback(SimpleFileTypePattern::new().build())
         .build();
 
     let meta_processor = MetaProcessor::new()
