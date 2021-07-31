@@ -50,6 +50,11 @@ impl SimpleFileTypePatternBuilder {
         self
     }
 
+    pub fn text(mut self, s: String) -> SimpleFileTypePatternBuilder {
+        self.text = s;
+        self
+    }
+
     pub fn audio(mut self, s: String) -> SimpleFileTypePatternBuilder {
         self.audio = s;
         self

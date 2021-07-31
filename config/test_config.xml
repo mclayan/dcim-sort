@@ -1,0 +1,43 @@
+<config>
+  <sorter>
+    <supported>
+      <segments>
+        <segment type="MakeModelPattern" index="0">
+          <parts>
+            <part index="0">Make</part>
+            <part index="1">Model</part>
+          </parts>
+          <replaceSpaces>true</replaceSpaces>
+          <defaulMake>unknown</defaulMake>
+          <defaultModel>unknown</defaultModel>
+          <separator>_</separator>
+          <caseNormalization>Lowercase</caseNormalization>
+          <fallback>unknown_device</fallback>
+        </segment>
+        <segment type="ScreenshotPattern" index="1">
+          <value>screenshots</value>
+        </segment>
+        <segment type="DateTimePattern" index="2">
+          <parts>
+            <part index="0">Year</part>
+            <part index="1">Month</part>
+          </parts>
+          <separator>-</separator>
+          <defaultValue>unknown</defaultValue>
+          <fallbackFsTimestamp>false</fallbackFsTimestamp>
+        </segment>
+      </segments>
+    </supported>
+    <fallback>
+      <segments>
+        <segment type="SimpleFileTypePattern" index="0">
+          <defaultVideo>videos</defaultVideo>
+          <defaultPicture>pictures</defaultPicture>
+          <defaultAudio>audio_files</defaultAudio>
+          <defaultDocument>documents</defaultDocument>
+          <defaultOther>other</defaultOther>
+        </segment>
+      </segments>
+    </fallback>
+  </sorter>
+</config>

@@ -2,6 +2,7 @@ mod index;
 mod sorting;
 mod pattern;
 mod media;
+mod config;
 
 use clap::{App, Arg};
 use std::path::PathBuf;
