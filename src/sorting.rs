@@ -2,6 +2,7 @@ use crate::pattern::{PatternElement};
 use std::path::{PathBuf, Path};
 use std::fs::{File};
 use crate::media::{ImgInfo, ImgMeta, FileMetaProcessor, FileType};
+use std::io::Error;
 
 #[derive(Clone, Copy)]
 pub enum Strategy {
@@ -140,9 +141,19 @@ impl Sorter {
                     Ok(_) => { self.created_dirs += 1 }
                 }
             }
-            let result = match strategy {
-                Strategy::Copy => { Sorter::copy_file(target.as_path(), img.path()) },
-                Strategy::Move => { Sorter::move_file(target, img.path() )}
+            let result: Result<Option<u64>, Error> = match strategy {
+                Strategy::Copy => {
+                    match Sorter::copy_file(target.as_path(), img.path()) {
+                        Ok(i) => Ok(Some(i)),
+                        Err(e) => Err(e)
+                    }
+                },
+                Strategy::Move => {
+                    match Sorter::move_file(target, img.path()) {
+                        Ok(_) => Ok(None),
+                        Err(e) => Err(e)
+                    }
+                }
             };
             match result {
                 Ok(_) => { self.sorted_files += 1; },

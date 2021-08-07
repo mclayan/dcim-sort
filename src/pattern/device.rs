@@ -24,15 +24,35 @@ pub struct MakeModelPattern {
 }
 
 impl MakeModelPattern {
+    pub fn def_replace_spaces() -> bool {
+        true
+    }
+
+    pub fn def_separator() -> char {
+        '_'
+    }
+
+    pub fn def_case() -> CaseNormalization {
+        CaseNormalization::Lowercase
+    }
+
+    pub fn def_default_make() -> String {
+        String::from("unknown")
+    }
+
+    pub fn def_default_model() -> String {
+        String::from("unknown")
+    }
+
     pub fn new() -> MakeModelPatternBuilder {
         MakeModelPatternBuilder {
             pattern: Vec::<DevicePart>::new(),
-            separator: '_',
-            case: CaseNormalization::Lowercase,
-            replace_spaces: true,
+            separator: Self::def_separator(),
+            case: Self::def_case(),
+            replace_spaces: Self::def_replace_spaces(),
             fallback: String::new(),
-            default_make: String::from("unknown"),
-            default_model: String::from("unknown")
+            default_make: Self::def_default_make(),
+            default_model: Self::def_default_model()
         }
     }
 

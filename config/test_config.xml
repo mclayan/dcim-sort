@@ -8,7 +8,7 @@
             <part index="1">Model</part>
           </parts>
           <replaceSpaces>true</replaceSpaces>
-          <defaulMake>unknown</defaulMake>
+          <defaultMake>unknown</defaulMake>
           <defaultModel>unknown</defaultModel>
           <separator>_</separator>
           <caseNormalization>Lowercase</caseNormalization>
