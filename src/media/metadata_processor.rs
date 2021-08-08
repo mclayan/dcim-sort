@@ -1,5 +1,4 @@
-use crate::media::{FileMetaProcessor, ImgInfo, MetaType, ImgMeta};
-use chrono::{DateTime, Local};
+use crate::media::{FileMetaProcessor, ImgInfo, MetaType};
 
 pub struct MetaProcessor {
     processors: Vec<Box<dyn FileMetaProcessor>>,

@@ -1,5 +1,6 @@
 <config>
   <sorter>
+    <duplicateResolution strategy="ignore"/>
     <supported>
       <segments>
         <segment type="MakeModelPattern" index="0">
@@ -34,6 +35,7 @@
           <defaultVideo>videos</defaultVideo>
           <defaultPicture>pictures</defaultPicture>
           <defaultAudio>audio_files</defaultAudio>
+          <defaultText>text</defaultText>
           <defaultDocument>documents</defaultDocument>
           <defaultOther>other</defaultOther>
         </segment>

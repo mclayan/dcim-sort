@@ -1,5 +1,4 @@
-use crate::pattern::{PatternInitError, PatternElement};
-use std::borrow::Borrow;
+use crate::pattern::{PatternElement};
 use crate::media::ImgInfo;
 
 pub enum DevicePart {
@@ -7,6 +6,17 @@ pub enum DevicePart {
     Model
 }
 
+impl DevicePart {
+    pub fn parse(s: &str) -> Option<DevicePart>{
+        match s.to_lowercase().as_str() {
+            "make" => Some(DevicePart::Make),
+            "model" => Some(DevicePart::Model),
+            _ => None
+        }
+    }
+}
+
+#[derive(Copy, Clone)]
 pub enum CaseNormalization {
     Lowercase,
     Uppercase,
@@ -156,6 +166,10 @@ impl MakeModelPatternBuilder {
     pub fn fallback(mut self, fallback: String) -> MakeModelPatternBuilder {
         self.fallback = fallback;
         self
+    }
+
+    pub fn push_part(&mut self, part: DevicePart) {
+        self.pattern.push(part);
     }
 
     pub fn build(mut self) -> Box<dyn PatternElement> {

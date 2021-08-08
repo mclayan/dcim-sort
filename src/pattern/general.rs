@@ -1,14 +1,19 @@
 use crate::pattern::PatternElement;
 use chrono::{DateTime, Local, Datelike, Timelike};
-use crate::main;
 use crate::media::ImgInfo;
+use crate::pattern::device::DevicePart;
 
 pub struct ScreenshotPattern {
     segment_name: String,
 }
 
 impl ScreenshotPattern {
+    pub fn def_value() -> String {
+        String::from("screenshots")
+    }
+
     pub fn new(seg_name: String) -> Box<dyn PatternElement> {
+
         Box::new(ScreenshotPattern {
             segment_name: seg_name
         })
@@ -47,6 +52,20 @@ pub enum DateTimePart {
     Second
 }
 
+impl DateTimePart {
+    pub fn parse(s: &str) -> Option<DateTimePart> {
+        match s.to_lowercase().as_str() {
+            "year"   => Some(DateTimePart::Year),
+            "month"  => Some(DateTimePart::Month),
+            "day"    => Some(DateTimePart::Day),
+            "hour"   => Some(DateTimePart::Hour),
+            "minute" => Some(DateTimePart::Minute),
+            "second" => Some(DateTimePart::Second),
+            _        => None
+        }
+    }
+}
+
 /// Pattern to generate a segment based on a timestamp
 /// associated with the file. Can be configured via
 /// separators. Values are always expanded to fixed-
@@ -65,11 +84,23 @@ pub struct DateTimePatternBuilder {
 }
 
 impl DateTimePattern {
+    pub fn def_fs_timestamp_fallback() -> bool {
+        false
+    }
+
+    pub fn def_separator() -> char {
+        '-'
+    }
+
+    pub fn def_default() -> String {
+        String::from("unknown")
+    }
+
     pub fn new() -> DateTimePatternBuilder {
         DateTimePatternBuilder {
-            fs_timestamp_fallback: false,
-            separator: '-',
-            default: String::from("unknown"),
+            fs_timestamp_fallback: Self::def_fs_timestamp_fallback(),
+            separator: Self::def_separator(),
+            default: Self::def_default(),
             pattern: Vec::new()
         }
     }
@@ -138,6 +169,10 @@ impl DateTimePatternBuilder {
     pub fn fs_timestamp_fallback(mut self, b: bool) -> DateTimePatternBuilder {
         self.fs_timestamp_fallback = b;
         self
+    }
+
+    pub fn push_part(&mut self, part: DateTimePart) {
+        self.pattern.push(part);
     }
 
     pub fn build(mut self) -> Box<dyn PatternElement> {

@@ -1,6 +1,5 @@
 use std::io::{Error, ErrorKind};
 use std::path::{PathBuf};
-use crate::index::PathBox::Directory;
 use crate::media::{ImgInfo, FileType};
 
 pub enum PathBox {

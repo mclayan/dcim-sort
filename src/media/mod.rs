@@ -1,4 +1,3 @@
-use std::fs::File;
 use chrono::{DateTime, Local};
 use std::path::{PathBuf, Path};
 use std::io::{Error, ErrorKind};

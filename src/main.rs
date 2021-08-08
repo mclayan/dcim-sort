@@ -13,7 +13,6 @@ use crate::pattern::general::{ScreenshotPattern, DateTimePattern, DateTimePart};
 use crate::pattern::fallback::{SimpleFileTypePattern};
 use crate::media::metadata_processor::{MetaProcessor, Priority};
 use crate::media::rexiv_proc::Rexiv2Processor;
-use crate::media::FileMetaProcessor;
 use crate::media::kadamak_exif::KadamakExifProcessor;
 
 struct MArgs {

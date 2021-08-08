@@ -7,12 +7,17 @@ use std::fmt::{Display, Formatter};
 
 pub enum CfgError {
     XmlParseFailure(minidom::Error),
-    IllegalValue(CfgValueError)
+    IllegalValue(CfgValueError),
+    UnsupportedSegment(CfgValueError)
 }
 
 impl CfgError {
-    pub fn val_err(msg: &str) -> CfgError::IllegalValue {
-        CfgError::IllegalValue(CfgValueError(msg))
+    pub fn val_err(msg: &str) -> CfgError {
+        CfgError::IllegalValue(CfgValueError::new(msg))
+    }
+
+    pub fn unsupported_segment(msg: &str) -> CfgError {
+        CfgError::UnsupportedSegment(CfgValueError::new(msg))
     }
 }
 

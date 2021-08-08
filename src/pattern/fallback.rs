@@ -1,6 +1,5 @@
 use crate::pattern::PatternElement;
 use crate::media::ImgInfo;
-use std::borrow::Borrow;
 
 enum GeneralFileType {
     Video,
@@ -105,14 +104,38 @@ impl PatternElement for SimpleFileTypePattern {
     }
 }
 impl SimpleFileTypePattern {
+    pub fn def_video() -> String {
+        String::from("videos")
+    }
+
+    pub fn def_picture() -> String {
+        String::from("pictures")
+    }
+
+    pub fn def_audio() -> String {
+        String::from("audio_files")
+    }
+
+    pub fn def_text() -> String {
+        String::from("text_files")
+    }
+
+    pub fn def_document() -> String {
+        String::from("documents")
+    }
+
+    pub fn def_other() -> String {
+        String::from("other")
+    }
+
     pub fn new() -> SimpleFileTypePatternBuilder {
         SimpleFileTypePatternBuilder {
-            video: String::from("videos"),
-            picture: String::from("pictures"),
-            audio: String::from("audio_files"),
-            text: String::from("text_files"),
-            document: String::from("documents"),
-            other: String::from("other")
+            video: Self::def_video(),
+            picture: Self::def_picture(),
+            audio: Self::def_audio(),
+            text: Self::def_text(),
+            document: Self::def_document(),
+            other: Self::def_other()
         }
     }
 }

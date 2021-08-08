@@ -1,7 +1,7 @@
 use crate::pattern::{PatternElement};
 use std::path::{PathBuf, Path};
 use std::fs::{File};
-use crate::media::{ImgInfo, ImgMeta, FileMetaProcessor, FileType};
+use crate::media::{ImgInfo, FileType};
 use std::io::Error;
 
 #[derive(Clone, Copy)]
