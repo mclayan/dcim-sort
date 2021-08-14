@@ -1,3 +1,4 @@
+<config xmlns="">
 <config>
   <sorter>
     <duplicateResolution strategy="ignore"/>
@@ -9,7 +10,7 @@
             <part index="1">Model</part>
           </parts>
           <replaceSpaces>true</replaceSpaces>
-          <defaultMake>unknown</defaulMake>
+          <defaultMake>unknown</defaultMake>
           <defaultModel>unknown</defaultModel>
           <separator>_</separator>
           <caseNormalization>Lowercase</caseNormalization>

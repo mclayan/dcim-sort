@@ -7,14 +7,17 @@ use std::io::Error;
 #[derive(Clone, Copy)]
 pub enum Strategy {
     Copy,
-    Move
+    Move,
+    Print
 }
+
+#[derive(Clone, Copy)]
 pub enum Comparison {
     Rename,
     FavorTarget,
     FavorSource,
 }
-
+#[derive(Clone, Copy)]
 pub enum DuplicateResolution {
     Ignore,
     Overwrite,
@@ -30,6 +33,7 @@ pub struct Sorter {
     skipped_files: u64,
     sorted_files: u64,
     created_dirs: u64,
+    dirs_to_create: Vec<String>
 }
 
 pub struct SorterBuilder {
@@ -43,14 +47,14 @@ impl SorterBuilder {
     /// Add a segment pattern to the internal vec of segments for sorting
     /// files with supported metadata.
     pub fn segment(mut self, s: Box<dyn PatternElement>) -> SorterBuilder {
-        self.segments.push(s);
+        self.push_segment_supported(s);
         self
     }
 
     /// Add a segment pattern to the internal vec of segments for sorting
     /// files without supported metadata.
     pub fn fallback(mut self, s: Box<dyn PatternElement>) -> SorterBuilder {
-        self.fallback_segments.push(s);
+        self.push_segment_fallback(s);
         self
     }
 
@@ -59,6 +63,14 @@ impl SorterBuilder {
     pub fn duplicate_handling(mut self, a: DuplicateResolution) -> SorterBuilder {
         self.dup_handling = a;
         self
+    }
+
+    pub fn push_segment_supported(&mut self, s: Box<dyn PatternElement>) {
+        self.segments.push(s);
+    }
+
+    pub fn push_segment_fallback(&mut self, s: Box<dyn PatternElement>) {
+        self.fallback_segments.push(s);
     }
 
     pub fn build(self) -> Sorter {
@@ -70,12 +82,17 @@ impl SorterBuilder {
             duplicate_counter: 0,
             skipped_files: 0,
             sorted_files: 0,
-            created_dirs: 0
+            created_dirs: 0,
+            dirs_to_create: Vec::new()
         }
     }
 }
 
 impl Sorter {
+    pub fn def_duplicate_handling() -> DuplicateResolution {
+        DuplicateResolution::Ignore
+    }
+
     pub fn new(target_dir: PathBuf) -> SorterBuilder {
         SorterBuilder {
             segments: Vec::new(),
@@ -88,6 +105,22 @@ impl Sorter {
     pub fn sort_all(&mut self, index: &Vec<ImgInfo>, strategy: Strategy) {
         for info in index {
             self.sort(info, strategy);
+        }
+        match strategy {
+            Strategy::Print => {
+                for dir in &self.dirs_to_create {
+                    println!("mkdir: {}", dir);
+                }
+                println!("=======[ Simulation Report]=========");
+                println!("total: {}\nfiles_sorted: {}\nfiles_skipped: {}\nduplicates: {}\ndirs_created: {}\n",
+                    index.len(),
+                    self.sorted_files,
+                    self.skipped_files,
+                    self.duplicate_counter,
+                    self.dirs_to_create.len()
+                );
+            },
+            _ => ()
         }
     }
 
@@ -132,13 +165,23 @@ impl Sorter {
 
         if do_execute {
             if !destination.exists() {
-                println!("mkdir: {}", destination.to_str().unwrap_or("INVALID_UTF-8"));
-                match std::fs::create_dir_all(destination) {
-                    Err(e) => {
-                        println!("Failed to create destination directory: {}", e);
-                        return;
+
+                match strategy {
+                    Strategy::Copy | Strategy::Move => {
+                        match std::fs::create_dir_all(destination) {
+                            Err(e) => {
+                                println!("Failed to create destination directory: {}", e);
+                                return;
+                            }
+                            Ok(_) => { self.created_dirs += 1 }
+                        }
                     }
-                    Ok(_) => { self.created_dirs += 1 }
+                    _ => {
+                        let path_str = String::from(destination.to_str().unwrap_or("INVALID_UTF-8"));
+                        if !self.dirs_to_create.contains(&path_str) {
+                            self.dirs_to_create.push(path_str);
+                        }
+                    }
                 }
             }
             let result: Result<Option<u64>, Error> = match strategy {
@@ -153,6 +196,13 @@ impl Sorter {
                         Ok(_) => Ok(None),
                         Err(e) => Err(e)
                     }
+                },
+                Strategy::Print => {
+                    println!("{} -> {}",
+                             img.path().to_str().unwrap_or("INVALID_UTF-8"),
+                             target.to_str().unwrap_or("INVALID_UTF-8")
+                    );
+                    Ok(None)
                 }
             };
             match result {
@@ -237,5 +287,13 @@ impl Sorter {
             target.set_file_name(name);
         }
         Some(target)
+    }
+
+    pub fn get_seg_count(&self) -> (usize,usize) {
+        (self.segments.len(), self.fallback_segments.len())
+    }
+
+    pub fn get_segments_supported(&self) -> &[Box<dyn PatternElement>] {
+        &self.segments[..]
     }
 }

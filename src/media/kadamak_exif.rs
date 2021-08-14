@@ -41,7 +41,7 @@ impl KadamakExifProcessor {
                     None => exif.get_field(exif::Tag::DateTimeOriginal, exif::In::PRIMARY),
                     Some(f) => Some(f)
                 };
-                let mut timestamp: Option<DateTime<Local>> = match datetime_field {
+                let timestamp: Option<DateTime<Local>> = match datetime_field {
                     None => None,
                     Some(field) => Self::parse_datetime(&field.value)
                 };
@@ -117,7 +117,7 @@ impl KadamakExifProcessor {
         }
         let trimmed = &bytes[8..];
         match std::str::from_utf8(trimmed) {
-            Err(e) => return Err(TagParseError::new("UserComment is not UTF-8 encodable!")),
+            Err(_) => return Err(TagParseError::new("UserComment is not UTF-8 encodable!")),
             Ok(s) => Ok(String::from(s))
         }
     }

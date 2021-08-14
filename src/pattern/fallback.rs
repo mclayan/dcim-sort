@@ -102,6 +102,21 @@ impl PatternElement for SimpleFileTypePattern {
             Some(self.other.clone())
         }
     }
+
+    fn display(&self) -> String {
+        format!("video=\"{}\" pic=\"{}\" audio=\"{}\" txt=\"{}\" doc=\"{}\" other=\"{}\"",
+            &self.video,
+            &self.picture,
+            &self.audio,
+            &self.text,
+            &self.document,
+            &self.other
+        )
+    }
+
+    fn name(&self) -> &str {
+        "SimpleFileTypePattern"
+    }
 }
 impl SimpleFileTypePattern {
     pub fn def_video() -> String {

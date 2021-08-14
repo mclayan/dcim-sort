@@ -83,14 +83,14 @@ impl PatternElement for MakeModelPattern {
     fn translate(&self, info: &ImgInfo) -> Option<String> {
         let (mut model, mut make) : (String, String);
         let meta = info.metadata();
-        make = match meta.make() {
+        make = self.normalize_case(match meta.make() {
             "" => self.default_make.clone(),
             _s => String::from(_s)
-        };
-        model = match meta.model() {
+        });
+        model = self.normalize_case(match meta.model() {
             "" => self.default_model.clone(),
             _s => String::from(_s)
-        };
+        });
         if self.replace_spaces {
             make = make.replace(' ', "-");
             model = model.replace(' ', "-");
@@ -119,6 +119,42 @@ impl PatternElement for MakeModelPattern {
             }
         }
         Some(result)
+    }
+
+    fn display(&self) -> String {
+        let mut pattern = String::new();
+        let mut first = true;
+        let case = match self.case {
+            CaseNormalization::Lowercase => "lower",
+            CaseNormalization::Uppercase => "upper",
+            CaseNormalization::None => ""
+        };
+
+        for p in &self.pattern {
+            let ps = match p {
+                DevicePart::Make => "[MAKE]",
+                DevicePart::Model => "[MODEL]"
+            };
+            if first {
+                first = false;
+            }
+            else {
+                pattern.push(self.separator);
+            }
+            pattern.push_str(ps);
+        }
+        format!("replace_spaces=\"{}\" case_norm=\"{}\" pattern=\"{}\" fallback=\"{}\" def_make=\"{} def_model=\"{}\"",
+            self.replace_spaces,
+            case,
+            pattern,
+            self.fallback,
+            &self.default_make,
+            &self.default_model
+        )
+    }
+
+    fn name(&self) -> &str {
+        "MakeModelPattern"
     }
 }
 

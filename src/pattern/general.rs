@@ -1,7 +1,6 @@
 use crate::pattern::PatternElement;
 use chrono::{DateTime, Local, Datelike, Timelike};
 use crate::media::ImgInfo;
-use crate::pattern::device::DevicePart;
 
 pub struct ScreenshotPattern {
     segment_name: String,
@@ -33,6 +32,14 @@ impl PatternElement for ScreenshotPattern {
         else {
             None
         }
+    }
+
+    fn display(&self) -> String {
+        format!("name=\"{}\"", self.segment_name)
+    }
+
+    fn name(&self) -> &str {
+        "ScreenshotPattern"
     }
 }
 
@@ -148,6 +155,38 @@ impl PatternElement for DateTimePattern {
             None => self.default.clone()
         };
         Some(result)
+    }
+
+    fn display(&self) -> String {
+        let mut s = String::new();
+        let mut first = true;
+
+        for p in &self.pattern {
+            let ps = match p {
+                DateTimePart::Year => 'y',
+                DateTimePart::Month => 'M',
+                DateTimePart::Day => 'd',
+                DateTimePart::Hour => 'h',
+                DateTimePart::Minute => 'm',
+                DateTimePart::Second => 's'
+            };
+            if first {
+                first = false;
+            }
+            else {
+                s.push(self.separator);
+            }
+            s.push(ps);
+        }
+        format!("pattern=\"{}\" default=\"{}\" fs_ts_fallback=\"{}\"",
+            s,
+            &self.default,
+            self.fs_timestamp_fallback
+        )
+    }
+
+    fn name(&self) -> &str {
+        "DateTimePattern"
     }
 }
 impl DateTimePatternBuilder {

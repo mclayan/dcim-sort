@@ -1,11 +1,10 @@
 use minidom::Element;
-use crate::config::{CfgError, CfgValueError};
+use crate::config::{CfgError, CfgValueError, SegmentConfig};
 use crate::pattern::device::{MakeModelPattern, CaseNormalization, DevicePart};
 use std::str::FromStr;
 use crate::pattern::general::{ScreenshotPattern, DateTimePattern, DateTimePart};
 use crate::pattern::fallback::SimpleFileTypePattern;
 use crate::pattern::PatternElement;
-use std::panic::panic_any;
 
 pub struct SegPart {
     index: i32,
@@ -127,8 +126,9 @@ impl SegPart {
     }
 }
 
+
 impl MakeModelPatternCfg {
-    pub fn from(el: &Element) -> Result<MakeModelPatternCfg, CfgError> {
+    pub fn from(el: &Element) -> Result<Box<dyn SegmentConfig>, CfgError> {
         let mut parts: Vec<SegPart> = Vec::new();
         let mut replace_spaces = MakeModelPattern::def_replace_spaces();
         let mut def_make = MakeModelPattern::def_default_make();
@@ -181,24 +181,28 @@ impl MakeModelPatternCfg {
             }
         }
 
-        Ok(MakeModelPatternCfg{
-            parts,
-            replace_spaces,
-            default_make: def_make,
-            default_model: def_model,
-            separator,
-            case_normalization,
-            fallback
-        })
+        Ok(
+            Box::new(MakeModelPatternCfg {
+                parts,
+                replace_spaces,
+                default_make: def_make,
+                default_model: def_model,
+                separator,
+                case_normalization,
+                fallback
+            })
+        )
     }
-
-    pub fn generate(&self) -> Result<Box<dyn PatternElement>, CfgError> {
+}
+impl SegmentConfig for MakeModelPatternCfg {
+    fn generate(&self) -> Result<Box<dyn PatternElement>, CfgError> {
         let mut builder = MakeModelPattern::new()
             .separator(self.separator)
             .case_normalization(self.case_normalization.clone())
             .replace_spaces(self.replace_spaces)
             .default_make(self.default_make.clone())
-            .default_model(self.default_model.clone());
+            .default_model(self.default_model.clone())
+            .fallback(self.fallback.clone());
 
         for part in &self.parts {
             if let Some(p) = DevicePart::parse(part.value.as_str()) {
@@ -215,8 +219,9 @@ impl MakeModelPatternCfg {
     }
 }
 
+
 impl ScreenshotPatternCfg {
-    pub fn from(el: &Element) -> Result<ScreenshotPatternCfg, CfgError> {
+    pub fn from(el: &Element) -> Result<Box<dyn SegmentConfig>, CfgError> {
         let mut value = ScreenshotPattern::def_value();
         for child in el.children() {
             match child.name() {
@@ -229,18 +234,22 @@ impl ScreenshotPatternCfg {
             }
         }
 
-        Ok(ScreenshotPatternCfg{
-            value
-        })
+        Ok(
+            Box::new(ScreenshotPatternCfg{
+                value
+            })
+        )
     }
-
-    pub fn generate(&self) -> Box<dyn PatternElement> {
-        ScreenshotPattern::new(self.value.clone())
+}
+impl SegmentConfig for ScreenshotPatternCfg {
+    fn generate(&self) -> Result<Box<dyn PatternElement>, CfgError> {
+        Ok(ScreenshotPattern::new(self.value.clone()))
     }
 }
 
+
 impl DateTimePatternCfg {
-    pub fn from(el: &Element) -> Result<DateTimePatternCfg, CfgError> {
+    pub fn from(el: &Element) -> Result<Box<dyn SegmentConfig>, CfgError> {
         let mut parts: Vec<SegPart> = Vec::new();
         let mut separator = DateTimePattern::def_separator();
         let mut def_val = DateTimePattern::def_default();
@@ -268,15 +277,18 @@ impl DateTimePatternCfg {
             }
         }
 
-        Ok(DateTimePatternCfg{
-            parts,
-            separator,
-            default_value: def_val,
-            fallback_fs_timestamp: fallback
-        })
+        Ok(
+            Box::new(DateTimePatternCfg {
+                parts,
+                separator,
+                default_value: def_val,
+                fallback_fs_timestamp: fallback
+            })
+        )
     }
-
-    pub fn generate(&self) -> Result<Box<dyn PatternElement>, CfgError> {
+}
+impl SegmentConfig for DateTimePatternCfg {
+    fn generate(&self) -> Result<Box<dyn PatternElement>, CfgError> {
         let mut builder = DateTimePattern::new()
             .separator(self.separator)
             .default(self.default_value.clone())
@@ -297,8 +309,9 @@ impl DateTimePatternCfg {
     }
 }
 
+
 impl SimpleFileTypePatternCfg {
-    pub fn from(el: &Element) -> Result<SimpleFileTypePatternCfg, CfgError> {
+    pub fn from(el: &Element) -> Result<Box<dyn SegmentConfig>, CfgError> {
         let mut video = SimpleFileTypePattern::def_video();
         let mut pic = SimpleFileTypePattern::def_picture();
         let mut audio = SimpleFileTypePattern::def_audio();
@@ -335,25 +348,28 @@ impl SimpleFileTypePatternCfg {
                 },
                 "defaultOther" => {
                     if let Some(s) = parse_string(child) {
-                        text = s;
+                        other = s;
                     }
                 }
                 _ => continue
             }
         }
 
-        Ok(SimpleFileTypePatternCfg{
-            default_video: video,
-            default_picture: pic,
-            default_audio: audio,
-            default_text: text,
-            default_document: doc,
-            default_other: other
-        })
+        Ok(
+            Box::new(SimpleFileTypePatternCfg{
+                default_video: video,
+                default_picture: pic,
+                default_audio: audio,
+                default_text: text,
+                default_document: doc,
+                default_other: other
+            })
+        )
     }
-
-    pub fn generate(&self) -> Box<dyn PatternElement> {
-        SimpleFileTypePattern::new()
+}
+impl SegmentConfig for SimpleFileTypePatternCfg {
+    fn generate(&self) -> Result<Box<dyn PatternElement>, CfgError> {
+        Ok(SimpleFileTypePattern::new()
             .video(self.default_video.clone())
             .picture(self.default_picture.clone())
             .audio(self.default_audio.clone())
@@ -361,5 +377,6 @@ impl SimpleFileTypePatternCfg {
             .document(self.default_document.clone())
             .other(self.default_other.clone())
             .build()
+        )
     }
 }

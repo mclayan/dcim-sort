@@ -8,7 +8,8 @@ pub mod fallback;
 pub trait PatternElement {
     fn is_optional(&self) -> bool;
     fn translate(&self, info: &ImgInfo) -> Option<String>;
-
+    fn display(&self) -> String;
+    fn name(&self) -> &str;
 }
 
 #[derive(Debug, Clone)]

@@ -1,18 +1,20 @@
 use crate::config::seg_config::{MakeModelPatternCfg, ScreenshotPatternCfg, DateTimePatternCfg, SimpleFileTypePatternCfg};
 use minidom::Element;
-use crate::config::{CfgError, CfgValueError};
+use crate::config::{CfgError, CfgValueError, SegmentConfig};
 use std::str::FromStr;
-use crate::sorting::{DuplicateResolution, Comparison};
+use crate::sorting::{DuplicateResolution, Comparison, Sorter};
+use std::path::PathBuf;
 
 pub struct SorterCfg {
     supported: Vec<SegmentCfg>,
     fallback: Vec<SegmentCfg>,
+    dup_handling: DuplicateResolution
 }
 
 pub struct SegmentCfg {
     seg_type: String,
     index: i32,
-    cfg: SegmentType
+    cfg: Box<dyn SegmentConfig>
 }
 
 pub enum SegmentType {
@@ -27,32 +29,31 @@ impl SegmentCfg {
     pub fn from(el: &Element) -> Result<SegmentCfg, CfgError> {
         let mut seg_tp = String::new();
         let mut index = 0;
-        let mut cfg = SegmentType::None;
 
         // get 'type' attribute
-        if let Some(tp) = el.attr("type") {
-            cfg = match tp {
-                "MakeModelPattern" => {
-                    SegmentType::MakeModelPattern(MakeModelPatternCfg::from(el)?)
-                },
-                "ScreenshotPattern" => {
-                    SegmentType::ScreenshotPattern(ScreenshotPatternCfg::from(el)?)
-                },
-                "DateTimePattern" => {
-                    SegmentType::DateTimePattern(DateTimePatternCfg::from(el)?)
-                },
-                "SimpleFileTypePattern" => {
-                    SegmentType::SimpleFileTypePattern(SimpleFileTypePatternCfg::from(el)?)
+        let cfg = match el.attr("type") {
+            Some(tp) => {
+                match tp {
+                    "MakeModelPattern" => {
+                        MakeModelPatternCfg::from(el)
+                    },
+                    "ScreenshotPattern" => {
+                        ScreenshotPatternCfg::from(el)
+                    },
+                    "DateTimePattern" => {
+                        DateTimePatternCfg::from(el)
+                    },
+                    "SimpleFileTypePattern" => {
+                        SimpleFileTypePatternCfg::from(el)
+                    }
+                    _ => {
+                        println!("[WARN] found unsupported segment type: {}", tp);
+                        Err(CfgError::unsupported_segment("unsupported segment type"))
+                    }
                 }
-                _ => {
-                    println!("[WARN] found unsupported segment type: {}", tp);
-                    return Err(CfgError::unsupported_segment("unsupported segment type"))
-                }
-            }
-        }
-        else {
-            return Err(CfgError::IllegalValue(CfgValueError::new("missing mandatory attribute \"type\"")));
-        }
+            },
+            None => Err(CfgError::IllegalValue(CfgValueError::new("missing mandatory attribute \"type\"")))
+        }?;
 
         // get index attribute
         if let Some(i_str) = el.attr("index") {
@@ -72,11 +73,13 @@ impl SegmentCfg {
         }
 
 
-        Ok(SegmentCfg{
-            seg_type: seg_tp,
-            index,
-            cfg
-        })
+        Ok(
+            SegmentCfg{
+                seg_type: seg_tp,
+                index,
+                cfg
+            }
+        )
     }
 
     pub fn from_multiple(el: &Element) -> Result<Vec<SegmentCfg>, CfgError> {
@@ -88,7 +91,7 @@ impl SegmentCfg {
                 if let Some(seg) = match Self::from(child) {
                     Ok(s) => Ok(Some(s)),
                     Err(e) => match e {
-                        CfgError::XmlParseFailure(_) | CfgError::IllegalValue(_) => Err(e),
+                        CfgError::XmlParseFailure(_) | CfgError::IllegalValue(_) | CfgError::IoError(_) => Err(e),
                         CfgError::UnsupportedSegment(x) => {
                             println!("[WARN] ignoring segment at index={}", i);
                             Ok(None)
@@ -121,22 +124,31 @@ impl SorterCfg {
     pub fn from(el: &Element) -> Result<SorterCfg, CfgError> {
         let mut fallback: Vec<SegmentCfg> = Vec::new();
         let mut supported: Vec<SegmentCfg> = Vec::new();
+        let mut dup_handling = Sorter::def_duplicate_handling();
 
         for child in el.children() {
             match child.name() {
                 "supported" => {
-                    supported = SegmentCfg::from_multiple(child)?;
+                    if let Some(segs) = child.get_child("segments", "") {
+                        supported = SegmentCfg::from_multiple(segs)?;
+                    }
                 },
                 "fallback" => {
-                    fallback = SegmentCfg::from_multiple(child)?;
-                }
+                    if let Some(segs) = child.get_child("segments", "") {
+                        fallback = SegmentCfg::from_multiple(segs)?;
+                    }
+                },
+                "duplicateResolution" => {
+                    dup_handling = Self::parse_duplicate_resolution(child)?;
+                },
                 _ => continue
             }
         }
 
         Ok(SorterCfg{
             supported,
-            fallback
+            fallback,
+            dup_handling
         })
     }
 
@@ -165,5 +177,20 @@ impl SorterCfg {
         else {
             Err(CfgError::val_err("missing attribute \"strategy\" on duplicateResolution"))
         }
+    }
+
+    pub fn generate(&self, target_dir: PathBuf) -> Result<Sorter, CfgError> {
+        let mut builder = Sorter::new(target_dir)
+            .duplicate_handling(self.dup_handling);
+
+        for seg in &self.supported {
+            builder.push_segment_supported(seg.cfg.generate()?);
+        }
+
+        for seg in &self.fallback {
+            builder.push_segment_fallback(seg.cfg.generate()?);
+        }
+
+        Ok(builder.build())
     }
 }
