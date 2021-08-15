@@ -228,15 +228,15 @@ impl Sorter {
         result
     }
 
-    pub fn translate(&mut self, img: &ImgInfo) -> PathBuf {
-        let mut dest = self.target_root.clone();
+    pub fn translate(&self, img: &ImgInfo) -> PathBuf {
+        let dest = self.target_root.clone();
         match img.file_type() {
             FileType::Other => { self.translate_unsupported(img, dest) },
             _ =>               { self.translate_supported(img, dest)   },
         }
     }
 
-    fn translate_supported(&mut self, img: &ImgInfo, mut dest: PathBuf) -> PathBuf {
+    fn translate_supported(&self, img: &ImgInfo, mut dest: PathBuf) -> PathBuf {
         for pattern in &self.segments {
             if let Some(seg_str) = pattern.translate(img) {
                 dest.push(seg_str);
@@ -245,7 +245,7 @@ impl Sorter {
         dest
     }
 
-    fn translate_unsupported(&mut self, img: &ImgInfo, mut dest: PathBuf) -> PathBuf {
+    fn translate_unsupported(&self, img: &ImgInfo, mut dest: PathBuf) -> PathBuf {
         for pattern in &self.fallback_segments {
             if let Some(seg_str) = pattern.translate(img) {
                 dest.push(seg_str);
@@ -283,7 +283,7 @@ impl Sorter {
             } else {
                 return None;
             }
-            let mut name = format!("{}.{:03}", filename, counter);
+            let name = format!("{}.{:03}", filename, counter);
             target.set_file_name(name);
         }
         Some(target)
