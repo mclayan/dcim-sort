@@ -1,3 +1,4 @@
+use std::rc::Rc;
 use minidom::Element;
 use crate::config::{CfgError, CfgValueError, SegmentConfig};
 use crate::pattern::device::{MakeModelPattern, CaseNormalization, DevicePart};
@@ -128,7 +129,7 @@ impl SegPart {
 
 
 impl MakeModelPatternCfg {
-    pub fn from(el: &Element) -> Result<Box<dyn SegmentConfig>, CfgError> {
+    pub fn from(el: &Element) -> Result<Box<dyn SegmentConfig + Send>, CfgError> {
         let mut parts: Vec<SegPart> = Vec::new();
         let mut replace_spaces = MakeModelPattern::def_replace_spaces();
         let mut def_make = MakeModelPattern::def_default_make();
@@ -195,7 +196,7 @@ impl MakeModelPatternCfg {
     }
 }
 impl SegmentConfig for MakeModelPatternCfg {
-    fn generate(&self) -> Result<Box<dyn PatternElement>, CfgError> {
+    fn generate(&self) -> Result<Box<dyn PatternElement + Send>, CfgError> {
         let mut builder = MakeModelPattern::new()
             .separator(self.separator)
             .case_normalization(self.case_normalization.clone())
@@ -221,7 +222,7 @@ impl SegmentConfig for MakeModelPatternCfg {
 
 
 impl ScreenshotPatternCfg {
-    pub fn from(el: &Element) -> Result<Box<dyn SegmentConfig>, CfgError> {
+    pub fn from(el: &Element) -> Result<Box<dyn SegmentConfig + Send>, CfgError> {
         let mut value = ScreenshotPattern::def_value();
         for child in el.children() {
             match child.name() {
@@ -242,14 +243,14 @@ impl ScreenshotPatternCfg {
     }
 }
 impl SegmentConfig for ScreenshotPatternCfg {
-    fn generate(&self) -> Result<Box<dyn PatternElement>, CfgError> {
+    fn generate(&self) -> Result<Box<dyn PatternElement + Send>, CfgError> {
         Ok(ScreenshotPattern::new(self.value.clone()))
     }
 }
 
 
 impl DateTimePatternCfg {
-    pub fn from(el: &Element) -> Result<Box<dyn SegmentConfig>, CfgError> {
+    pub fn from(el: &Element) -> Result<Box<dyn SegmentConfig + Send>, CfgError> {
         let mut parts: Vec<SegPart> = Vec::new();
         let mut separator = DateTimePattern::def_separator();
         let mut def_val = DateTimePattern::def_default();
@@ -288,7 +289,7 @@ impl DateTimePatternCfg {
     }
 }
 impl SegmentConfig for DateTimePatternCfg {
-    fn generate(&self) -> Result<Box<dyn PatternElement>, CfgError> {
+    fn generate(&self) -> Result<Box<dyn PatternElement + Send>, CfgError> {
         let mut builder = DateTimePattern::new()
             .separator(self.separator)
             .default(self.default_value.clone())
@@ -311,7 +312,7 @@ impl SegmentConfig for DateTimePatternCfg {
 
 
 impl SimpleFileTypePatternCfg {
-    pub fn from(el: &Element) -> Result<Box<dyn SegmentConfig>, CfgError> {
+    pub fn from(el: &Element) -> Result<Box<dyn SegmentConfig + Send>, CfgError> {
         let mut video = SimpleFileTypePattern::def_video();
         let mut pic = SimpleFileTypePattern::def_picture();
         let mut audio = SimpleFileTypePattern::def_audio();
@@ -368,7 +369,7 @@ impl SimpleFileTypePatternCfg {
     }
 }
 impl SegmentConfig for SimpleFileTypePatternCfg {
-    fn generate(&self) -> Result<Box<dyn PatternElement>, CfgError> {
+    fn generate(&self) -> Result<Box<dyn PatternElement + Send>, CfgError> {
         Ok(SimpleFileTypePattern::new()
             .video(self.default_video.clone())
             .picture(self.default_picture.clone())

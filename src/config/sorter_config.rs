@@ -2,8 +2,9 @@ use crate::config::seg_config::{MakeModelPatternCfg, ScreenshotPatternCfg, DateT
 use minidom::Element;
 use crate::config::{CfgError, CfgValueError, SegmentConfig};
 use std::str::FromStr;
-use crate::sorting::{DuplicateResolution, Comparison, Sorter};
+use crate::sorting::{DuplicateResolution, Comparison, Sorter, SorterBuilder};
 use std::path::PathBuf;
+use std::rc::Rc;
 
 pub struct SorterCfg {
     supported: Vec<SegmentCfg>,
@@ -14,7 +15,7 @@ pub struct SorterCfg {
 pub struct SegmentCfg {
     seg_type: String,
     index: i32,
-    cfg: Box<dyn SegmentConfig>
+    cfg: Box<dyn SegmentConfig + Send>
 }
 
 pub enum SegmentType {
@@ -179,7 +180,7 @@ impl SorterCfg {
         }
     }
 
-    pub fn generate(&self, target_dir: PathBuf) -> Result<Sorter, CfgError> {
+    pub fn generate_builder(&self, target_dir: PathBuf) -> Result<SorterBuilder, CfgError> {
         let mut builder = Sorter::new(target_dir)
             .duplicate_handling(self.dup_handling);
 
@@ -190,7 +191,14 @@ impl SorterCfg {
         for seg in &self.fallback {
             builder.push_segment_fallback(seg.cfg.generate()?);
         }
+        Ok(builder)
+    }
+
+    /*
+    pub fn generate(&self, target_dir: PathBuf, mpsc::) -> Result<Sorter, CfgError> {
+        let mut builder = self.generate_builder(target_dir);
 
         Ok(builder.build())
     }
+     */
 }

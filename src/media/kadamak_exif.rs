@@ -25,10 +25,14 @@ impl FileMetaProcessor for KadamakExifProcessor {
     fn read_metadata(&self, file: &Path) -> Option<ImgMeta> {
         Self::read_meta_exif(file)
     }
+
+    fn clone_boxed(&self) -> Box<dyn FileMetaProcessor + Send> {
+        KadamakExifProcessor::new()
+    }
 }
 
 impl KadamakExifProcessor {
-    pub fn new() -> Box<dyn FileMetaProcessor> {
+    pub fn new() -> Box<dyn FileMetaProcessor + Send> {
         Box::new(KadamakExifProcessor{})
     }
 

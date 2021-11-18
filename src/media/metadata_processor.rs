@@ -1,12 +1,14 @@
 use crate::media::{FileMetaProcessor, ImgInfo, MetaType};
+use std::sync::mpsc;
+use crate::pipeline::{Request, ControlMsg};
 
 pub struct MetaProcessor {
-    processors: Vec<Box<dyn FileMetaProcessor>>,
+    processors: Vec<Box<dyn FileMetaProcessor + Send>>,
 }
 pub struct MetaProcessorBuilder {
-    proc_p_high: Vec<Box<dyn FileMetaProcessor>>,
-    proc_p_none: Vec<Box<dyn FileMetaProcessor>>,
-    proc_p_low: Vec<Box<dyn FileMetaProcessor>>,
+    proc_p_high: Vec<Box<dyn FileMetaProcessor + Send>>,
+    proc_p_none: Vec<Box<dyn FileMetaProcessor + Send>>,
+    proc_p_low: Vec<Box<dyn FileMetaProcessor + Send>>,
 }
 
 pub enum Priority {
@@ -17,7 +19,7 @@ pub enum Priority {
 }
 
 impl MetaProcessorBuilder {
-    pub fn processor(mut self, p: Box<dyn FileMetaProcessor>, prio: Priority) -> MetaProcessorBuilder {
+    pub fn processor(mut self, p: Box<dyn FileMetaProcessor + Send>, prio: Priority) -> MetaProcessorBuilder {
         match prio {
             Priority::Highest => { self.proc_p_high.push(p); },
             Priority::Lowest => { self.proc_p_low.push(p); },
@@ -35,14 +37,34 @@ impl MetaProcessorBuilder {
     }
 
     pub fn build(mut self) -> MetaProcessor {
-        let cap = self.proc_p_none.len() + self.proc_p_high.len() + self.proc_p_low.len();
-        let mut processors: Vec<Box<dyn FileMetaProcessor>> = Vec::with_capacity(cap);
-        processors.append(&mut self.proc_p_high);
-        processors.append(&mut self.proc_p_none);
-        processors.append(&mut self.proc_p_low);
+        let mut processors = self.clone_procs();
         MetaProcessor {
             processors
         }
+    }
+
+    pub(crate) fn build_clone(&self) -> MetaProcessor {
+        let mut processors = self.clone_procs();
+
+        MetaProcessor {
+            processors
+        }
+    }
+
+    fn clone_procs(&self) -> Vec<Box<dyn FileMetaProcessor + Send>> {
+        let mut procs = Vec::<Box<dyn FileMetaProcessor + Send>>::with_capacity(self.proc_p_high.len() + self.proc_p_high.len() + self.proc_p_low.len());;
+
+        for proc in &self.proc_p_high {
+            procs.push(proc.clone_boxed());
+        }
+        for proc in &self.proc_p_none {
+            procs.push(proc.clone_boxed());
+        }
+        for proc in &self.proc_p_low {
+            procs.push(proc.clone_boxed());
+        }
+
+        procs
     }
 }
 

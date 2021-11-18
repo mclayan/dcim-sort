@@ -1,8 +1,15 @@
-use crate::pattern::{PatternElement};
+pub mod fs_support;
+
 use std::path::{PathBuf, Path};
 use std::fs::{File};
-use crate::media::{ImgInfo, FileType};
 use std::io::Error;
+use std::rc::Rc;
+use std::sync::mpsc;
+use std::sync::mpsc::{RecvError, Sender};
+use crate::pattern::{PatternElement};
+use crate::media::{ImgInfo, FileType};
+use crate::pipeline::{ControlMsg, Report, Request};
+use crate::sorting::fs_support::DirCreationRequest;
 
 #[derive(Clone, Copy)]
 pub enum Strategy {
@@ -25,20 +32,23 @@ pub enum DuplicateResolution {
 }
 
 pub struct Sorter {
-    segments: Vec<Box<dyn PatternElement>>,
-    fallback_segments: Vec<Box<dyn PatternElement>>,
+    segments: Vec<Box<dyn PatternElement + Send>>,
+    fallback_segments: Vec<Box<dyn PatternElement + Send>>,
     dup_handling: DuplicateResolution,
     target_root: PathBuf,
     duplicate_counter: u64,
     skipped_files: u64,
     sorted_files: u64,
     created_dirs: u64,
-    dirs_to_create: Vec<String>
+    dirs_to_create: Vec<String>,
+    rx_callback: mpsc::Receiver<bool>,
+    tx_callback: mpsc::Sender<bool>,
+    tx_dir_creation: mpsc::Sender<DirCreationRequest>
 }
 
 pub struct SorterBuilder {
-    segments: Vec<Box<dyn PatternElement>>,
-    fallback_segments: Vec<Box<dyn PatternElement>>,
+    segments: Vec<Box<dyn PatternElement + Send>>,
+    fallback_segments: Vec<Box<dyn PatternElement + Send>>,
     dup_handling: DuplicateResolution,
     target_root: PathBuf,
 }
@@ -46,14 +56,14 @@ pub struct SorterBuilder {
 impl SorterBuilder {
     /// Add a segment pattern to the internal vec of segments for sorting
     /// files with supported metadata.
-    pub fn segment(mut self, s: Box<dyn PatternElement>) -> SorterBuilder {
+    pub fn segment(mut self, s: Box<dyn PatternElement + Send>) -> SorterBuilder {
         self.push_segment_supported(s);
         self
     }
 
     /// Add a segment pattern to the internal vec of segments for sorting
     /// files without supported metadata.
-    pub fn fallback(mut self, s: Box<dyn PatternElement>) -> SorterBuilder {
+    pub fn fallback(mut self, s: Box<dyn PatternElement + Send>) -> SorterBuilder {
         self.push_segment_fallback(s);
         self
     }
@@ -65,26 +75,65 @@ impl SorterBuilder {
         self
     }
 
-    pub fn push_segment_supported(&mut self, s: Box<dyn PatternElement>) {
+    pub fn push_segment_supported(&mut self, s: Box<dyn PatternElement + Send>) {
         self.segments.push(s);
     }
 
-    pub fn push_segment_fallback(&mut self, s: Box<dyn PatternElement>) {
+    pub fn push_segment_fallback(&mut self, s: Box<dyn PatternElement + Send>) {
         self.fallback_segments.push(s);
     }
 
-    pub fn build(self) -> Sorter {
+    pub fn build(self, dir_creation_tx: mpsc::Sender<DirCreationRequest>) -> Sorter {
+        let (tx, rx) = mpsc::channel::<bool>();
+        let segs = self.clone_segs();
         Sorter {
-            segments: self.segments,
-            fallback_segments: self.fallback_segments,
+            segments: segs.0,
+            fallback_segments: segs.1,
             dup_handling: self.dup_handling,
             target_root: self.target_root,
             duplicate_counter: 0,
             skipped_files: 0,
             sorted_files: 0,
             created_dirs: 0,
-            dirs_to_create: Vec::new()
+            dirs_to_create: Vec::new(),
+            rx_callback: rx,
+            tx_callback: tx,
+            tx_dir_creation: dir_creation_tx
         }
+    }
+
+    pub fn build_clone(&self, dir_creation_tx: mpsc::Sender<DirCreationRequest>) -> Sorter {
+        let (tx, rx) = mpsc::channel::<bool>();
+        let segs = self.clone_segs();
+        Sorter {
+            segments: segs.0,
+            fallback_segments: segs.1,
+            dup_handling: self.dup_handling,
+            target_root: self.target_root.clone(),
+            duplicate_counter: 0,
+            skipped_files: 0,
+            sorted_files: 0,
+            created_dirs: 0,
+            dirs_to_create: Vec::new(),
+            rx_callback: rx,
+            tx_callback: tx,
+            tx_dir_creation: dir_creation_tx
+        }
+    }
+
+    fn clone_segs(&self) -> (Vec<Box<dyn PatternElement + Send>>, Vec<Box<dyn PatternElement + Send>>) {
+        let mut segs = Vec::<Box<dyn PatternElement + Send>>::with_capacity(self.segments.len());
+        let mut fb_segs = Vec::<Box<dyn PatternElement + Send>>::with_capacity(self.fallback_segments.len());
+
+        for s in &self.segments {
+            segs.push(s.clone_boxed());
+        }
+
+        for s in &self.fallback_segments {
+            fb_segs.push(s.clone_boxed());
+        }
+
+        (segs, fb_segs)
     }
 }
 
@@ -113,15 +162,15 @@ impl Sorter {
                 }
                 println!("=======[ Simulation Report]=========");
                 println!("total: {}\nfiles_sorted: {}\nfiles_skipped: {}\nduplicates: {}\ndirs_created: {}\n",
-                    index.len(),
-                    self.sorted_files,
-                    self.skipped_files,
-                    self.duplicate_counter,
-                    self.dirs_to_create.len()
+                         index.len(),
+                         self.sorted_files,
+                         self.skipped_files,
+                         self.duplicate_counter,
+                         self.dirs_to_create.len()
                 );
             },
             _ => ()
-        }
+        };
     }
 
     pub fn sort(&mut self, img: &ImgInfo, strategy: Strategy) {
@@ -165,7 +214,23 @@ impl Sorter {
 
         if do_execute {
             if !destination.exists() {
-
+                let req = DirCreationRequest::new(&destination, self.tx_callback.clone());
+                self.tx_dir_creation.send(req);
+                match self.rx_callback.recv() {
+                    Ok(b) => {
+                        match b {
+                            true => (),
+                            false => eprintln!("failed to create destination dir: {}", destination.to_str().unwrap_or("<INVALID_UTF-8>"))
+                        }
+                    }
+                    Err(e) => {
+                        panic!("Could not receive callback from DirManager: {}", e);
+                    }
+                }
+                if matches!(strategy, Strategy::Print) {
+                    self.dirs_to_create.push(String::from(destination.to_str().unwrap_or("<INVALID_UTF-8>")));
+                }
+                /*
                 match strategy {
                     Strategy::Copy | Strategy::Move => {
                         match std::fs::create_dir_all(destination) {
@@ -183,6 +248,7 @@ impl Sorter {
                         }
                     }
                 }
+                 */
             }
             let result: Result<Option<u64>, Error> = match strategy {
                 Strategy::Copy => {
@@ -208,7 +274,7 @@ impl Sorter {
             match result {
                 Ok(_) => { self.sorted_files += 1; },
                 Err(e) => {
-                    eprintln!("Error sorting file {}: {}", img.path().to_str().unwrap_or("INVALID_UTF-8"), e);
+                    eprintln!("[Sorter] Error sorting file {}: {}", img.path().to_str().unwrap_or("INVALID_UTF-8"), e);
                 }
             }
 
@@ -293,7 +359,15 @@ impl Sorter {
         (self.segments.len(), self.fallback_segments.len())
     }
 
-    pub fn get_segments_supported(&self) -> &[Box<dyn PatternElement>] {
+    pub fn get_segments_supported(&self) -> &[Box<dyn PatternElement + Send>] {
         &self.segments[..]
+    }
+
+    pub fn get_report(&self) -> Report {
+        Report {
+            count_success: self.sorted_files,
+            count_skipped: self.skipped_files,
+            count_duplicate: self.duplicate_counter
+        }
     }
 }

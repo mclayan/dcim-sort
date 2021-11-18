@@ -1,5 +1,6 @@
+use std::collections::hash_map::DefaultHasher;
+use std::hash::{Hash, Hasher};
 use std::path::PathBuf;
-use std::panic::panic_any;
 
 enum Element {
     Complex(String),
@@ -21,8 +22,18 @@ fn main() {
     }
 
     let mut path = PathBuf::from("/usr/fantasy");
+    let path2 = PathBuf::from("/usr/fantasy/child_folder/foo.elf");
     path.push("child_folder");
     path.push(PathBuf::from("/usr/bin/foo.elf").as_path().file_name().unwrap());
     println!("path={}", path.to_str().unwrap());
     println!("path={}", path.to_str().unwrap());
+
+    let mut hasher = DefaultHasher::new();
+    let mut hasher2 = DefaultHasher::new();
+    path.hash(&mut hasher);
+    let h1 = hasher.finish();
+    path2.as_path().hash(&mut hasher2);
+    let h2 = hasher2.finish();
+    println!("h1: {}\nh2: {}", h1, h2);
+
 }

@@ -3,15 +3,16 @@ mod sorting;
 mod pattern;
 mod media;
 mod config;
+mod pipeline;
 
 use clap::{App, Arg};
 use std::path::{PathBuf, Path};
 use crate::index::Scanner;
-use crate::sorting::{Sorter, Strategy};
+use crate::sorting::{Sorter, SorterBuilder, Strategy};
 use crate::pattern::device::{MakeModelPattern, DevicePart, CaseNormalization};
 use crate::pattern::general::{ScreenshotPattern, DateTimePattern, DateTimePart};
 use crate::pattern::fallback::{SimpleFileTypePattern};
-use crate::media::metadata_processor::{MetaProcessor, Priority};
+use crate::media::metadata_processor::{MetaProcessor, MetaProcessorBuilder, Priority};
 use crate::media::rexiv_proc::Rexiv2Processor;
 use crate::media::kadamak_exif::KadamakExifProcessor;
 use crate::config::{RootCfg};
@@ -19,7 +20,10 @@ use std::fs::File;
 use std::sync::atomic::Ordering::AcqRel;
 use std::ops::Index;
 use std::any::{type_name, Any};
+use std::time;
+use chrono::Duration;
 use crate::pattern::PatternElement;
+use crate::pipeline::{Pipeline, PipelineController};
 
 
 enum Operation {
@@ -36,7 +40,8 @@ struct MArgs {
     ignore_unknown_types: bool,
     dry_run: bool,
     config_path: Option<PathBuf>,
-    operation: Operation
+    operation: Operation,
+    thread_count: usize
 }
 
 fn main() {
@@ -50,22 +55,18 @@ fn main() {
     let mut sorter = match &args.config_path {
         Some(cfg) => {
             let root_cfg = read_config(cfg.as_path());
-            root_cfg.generate_sorter(outdir).expect("Failed to read configuration!")
+            root_cfg.generate_sorter_builder(outdir).expect("Failed to read configuration!")
         }
         None => generate_default_sorter(outdir)
     };
 
     let meta_processor = MetaProcessor::new()
         .processor(Rexiv2Processor::new(), Priority::None)
-        .processor(KadamakExifProcessor::new(), Priority::Lowest)
-        .build();
+        .processor(KadamakExifProcessor::new(), Priority::Lowest);
 
-    if args.debug > 0 {
-        print_config(&sorter, &args);
-    }
 
     if !args.dry_run {
-        process_files(args, &mut sorter, meta_processor);
+        process_files(args, sorter, meta_processor);
     }
 }
 
@@ -82,28 +83,45 @@ fn print_config(sorter: &Sorter, args: &MArgs) {
     println!();
 }
 
-fn process_files(args: MArgs, sorter: &mut Sorter, meta_processor: MetaProcessor) {
-
+fn process_files(args: MArgs, sorter: SorterBuilder, meta_processor: MetaProcessorBuilder) {
     println!("[INFO] Processing file: {}", &args.file);
     let mut scanner = Scanner::new(args.file.clone()).unwrap();
     scanner.debug(args.debug > 1);
     scanner.ignore_unknown_types(args.ignore_unknown_types);
 
-    let mut children = scanner.scan();
+    let strategy = match args.operation {
+        Operation::Move => Strategy::Move,
+        Operation::Copy => Strategy::Copy,
+        Operation::Simulate => Strategy::Print
+    };
+    let mut pipeline = PipelineController::new(
+        args.thread_count,
+        meta_processor,
+        sorter,
+        strategy
+    );
 
-    children = meta_processor.process_all(children);
-
-    match args.operation {
-        Operation::Move =>      { sorter.sort_all(&children, Strategy::Move);  }
-        Operation::Copy =>      { sorter.sort_all(&children, Strategy::Copy);  }
-        Operation::Simulate =>  { sorter.sort_all(&children, Strategy::Print); }
+    if args.debug > 0 {
+        pipeline.debug();
     }
 
+    let time_start = time::Instant::now();
+    scanner.scan_pipeline(&mut pipeline);
+    println!("[main] finished scanning, joining threads.");
+    let report = pipeline.shutdown();
 
+    let elapsed = chrono::Duration::from_std(time_start.elapsed()).unwrap();
+    print!("=== summary ======\n{}", report);
+    println!("took {:.4} seconds or {:03}:{:02}:{:02}", elapsed.num_milliseconds() as f64 / 1000.0,
+        elapsed.num_hours(),
+        elapsed.num_minutes() % 60,
+        elapsed.num_seconds() % 3600
+    );
 }
 
 fn parse_args() -> MArgs {
     let name_outdir = "output-dir";
+    let name_threads = "max-threads";
     let name_infile = "FILE";
     let name_max_recursion = "max-recursion";
     let name_debug = "debug";
@@ -123,6 +141,12 @@ fn parse_args() -> MArgs {
             .long("output")
             .default_value("sorted")
             .about("Output directory"))
+        .arg(Arg::new(name_threads)
+            .required(false)
+            .short('p')
+            .long("max-threads")
+            .default_value("4")
+            .about("Max Thread Count"))
         .arg(Arg::new(name_max_recursion)
             .multiple(false)
             .short('n')
@@ -173,6 +197,7 @@ fn parse_args() -> MArgs {
 
 
     let max_recursion: u8 = matches.value_of_t_or_exit(name_max_recursion);
+    let max_threads: usize = matches.value_of_t_or_exit(name_threads);
     let debug = matches.occurrences_of(name_debug);
     let ignore_unknown = matches.is_present(name_ignore_ftype);
     let dry_run = matches.is_present(name_simulate);
@@ -205,7 +230,8 @@ fn parse_args() -> MArgs {
         ignore_unknown_types: ignore_unknown,
         dry_run,
         config_path: cfg_path,
-        operation
+        operation,
+        thread_count: max_threads
     }
 }
 
@@ -221,7 +247,7 @@ pub fn read_config(path: &Path) -> RootCfg {
     RootCfg::read_file(&mut file).unwrap()
 }
 
-pub fn generate_default_sorter(outdir: PathBuf) -> Sorter {
+pub fn generate_default_sorter(outdir: PathBuf) -> SorterBuilder {
     Sorter::new(outdir)
         .segment(MakeModelPattern::new()
             .part(DevicePart::Make)
@@ -237,5 +263,4 @@ pub fn generate_default_sorter(outdir: PathBuf) -> Sorter {
             .part(DateTimePart::Month)
             .build())
         .fallback(SimpleFileTypePattern::new().build())
-        .build()
 }

@@ -1,3 +1,4 @@
+use std::rc::Rc;
 use crate::pattern::PatternElement;
 use chrono::{DateTime, Local, Datelike, Timelike};
 use crate::media::ImgInfo;
@@ -11,7 +12,7 @@ impl ScreenshotPattern {
         String::from("screenshots")
     }
 
-    pub fn new(seg_name: String) -> Box<dyn PatternElement> {
+    pub fn new(seg_name: String) -> Box<dyn PatternElement + Send> {
 
         Box::new(ScreenshotPattern {
             segment_name: seg_name
@@ -41,9 +42,15 @@ impl PatternElement for ScreenshotPattern {
     fn name(&self) -> &str {
         "ScreenshotPattern"
     }
+
+    fn clone_boxed(&self) -> Box<dyn PatternElement + Send> {
+        Box::new(ScreenshotPattern{
+            segment_name: self.segment_name.clone()
+        })
+    }
 }
 
-
+#[derive(Clone)]
 pub enum DateTimePart {
     /// Year, formatted as 'YYYY'
     Year,
@@ -188,6 +195,15 @@ impl PatternElement for DateTimePattern {
     fn name(&self) -> &str {
         "DateTimePattern"
     }
+
+    fn clone_boxed(&self) -> Box<dyn PatternElement + Send> {
+        Box::new(DateTimePattern{
+            fs_timestamp_fallback: self.fs_timestamp_fallback,
+            separator: self.separator,
+            default: self.default.clone(),
+            pattern: self.pattern.clone()
+        })
+    }
 }
 impl DateTimePatternBuilder {
     pub fn part(mut self, p: DateTimePart) -> DateTimePatternBuilder {
@@ -214,7 +230,7 @@ impl DateTimePatternBuilder {
         self.pattern.push(part);
     }
 
-    pub fn build(mut self) -> Box<dyn PatternElement> {
+    pub fn build(mut self) -> Box<dyn PatternElement + Send> {
         if self.pattern.len() == 0 {
             self.pattern = vec![DateTimePart::Year, DateTimePart::Month]
         }

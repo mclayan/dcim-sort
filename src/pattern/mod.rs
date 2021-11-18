@@ -10,6 +10,7 @@ pub trait PatternElement {
     fn translate(&self, info: &ImgInfo) -> Option<String>;
     fn display(&self) -> String;
     fn name(&self) -> &str;
+    fn clone_boxed(&self) -> Box<dyn PatternElement + Send>;
 }
 
 #[derive(Debug, Clone)]

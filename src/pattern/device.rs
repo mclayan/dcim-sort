@@ -1,6 +1,8 @@
+use std::rc::Rc;
 use crate::pattern::{PatternElement};
 use crate::media::ImgInfo;
 
+#[derive(Clone)]
 pub enum DevicePart {
     Make,
     Model
@@ -156,6 +158,18 @@ impl PatternElement for MakeModelPattern {
     fn name(&self) -> &str {
         "MakeModelPattern"
     }
+
+    fn clone_boxed(&self) -> Box<dyn PatternElement + Send> {
+        Box::new(MakeModelPattern{
+            pattern: self.pattern.clone(),
+            separator: self.separator,
+            case: self.case.clone(),
+            replace_spaces: self.replace_spaces,
+            fallback: self.fallback.clone(),
+            default_make: self.default_make.clone(),
+            default_model: self.default_model.clone()
+        })
+    }
 }
 
 pub struct MakeModelPatternBuilder {
@@ -208,7 +222,7 @@ impl MakeModelPatternBuilder {
         self.pattern.push(part);
     }
 
-    pub fn build(mut self) -> Box<dyn PatternElement> {
+    pub fn build(mut self) -> Box<dyn PatternElement + Send> {
         if self.pattern.len() < 1 {
             self.pattern.push(DevicePart::Make);
             self.pattern.push(DevicePart::Model);

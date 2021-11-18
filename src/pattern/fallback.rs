@@ -1,3 +1,4 @@
+use std::rc::Rc;
 use crate::pattern::PatternElement;
 use crate::media::ImgInfo;
 
@@ -22,6 +23,7 @@ impl GeneralFileType {
     }
 }
 
+#[derive(Clone)]
 pub struct SimpleFileTypePattern {
     video: String,
     picture: String,
@@ -69,7 +71,7 @@ impl SimpleFileTypePatternBuilder {
         self
     }
 
-    pub fn build(mut self) -> Box<dyn PatternElement> {
+    pub fn build(mut self) -> Box<dyn PatternElement + Send> {
         Box::new(SimpleFileTypePattern{
             video: self.video,
             picture: self.picture,
@@ -116,6 +118,10 @@ impl PatternElement for SimpleFileTypePattern {
 
     fn name(&self) -> &str {
         "SimpleFileTypePattern"
+    }
+
+    fn clone_boxed(&self) -> Box<dyn PatternElement + Send> {
+        Box::new(self.clone())
     }
 }
 impl SimpleFileTypePattern {

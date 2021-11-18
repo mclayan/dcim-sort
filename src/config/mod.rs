@@ -9,8 +9,9 @@ use crate::config::sorter_config::SorterCfg;
 use minidom::Element;
 use std::fs::File;
 use std::io::Read;
-use crate::sorting::Sorter;
+use crate::sorting::{Sorter, SorterBuilder};
 use std::path::PathBuf;
+use std::rc::Rc;
 
 #[derive(Debug)]
 pub enum CfgError {
@@ -50,7 +51,7 @@ impl CfgValueError {
 }
 
 pub trait SegmentConfig {
-    fn generate(&self) -> Result<Box<dyn PatternElement>, CfgError>;
+    fn generate(&self) -> Result<Box<dyn PatternElement + Send>, CfgError>;
 }
 
 pub struct RootCfg {
@@ -101,7 +102,13 @@ impl RootCfg {
         }
     }
 
+    pub fn generate_sorter_builder(&self, outdir: PathBuf) -> Result<SorterBuilder, CfgError> {
+        self.sorter.generate_builder(outdir)
+    }
+
+    /*
     pub fn generate_sorter(&self, outdir: PathBuf) -> Result<Sorter, CfgError> {
         self.sorter.generate(outdir)
     }
+     */
 }

@@ -1,6 +1,8 @@
 use std::io::{Error, ErrorKind};
 use std::path::{PathBuf};
+use std::sync::mpsc;
 use crate::media::{ImgInfo, FileType};
+use crate::pipeline::{PipelineController, Request};
 
 pub enum PathBox {
     Directory(PathBuf),
@@ -66,6 +68,14 @@ impl Scanner {
         index
     }
 
+    pub fn scan_pipeline(&mut self, controller: &mut PipelineController) {
+        if self.debug {
+            println!("starting with root={}", self.entry_point);
+        }
+        let root = PathBuf::from(&self.entry_point);
+        self.scan_path_ch(PathBox::from(root), controller);
+    }
+
     fn scan_path(&mut self, d: PathBox, index: &mut Vec<ImgInfo>) {
         if self.debug {
             let tmp = match &d{
@@ -103,5 +113,43 @@ impl Scanner {
             }
         }
 
+    }
+
+    fn scan_path_ch(&mut self, d: PathBox, controller: &mut PipelineController) {
+        if self.debug {
+            let tmp = match &d{
+                PathBox::Directory(d) => ("d", String::from(d.to_str().unwrap_or("?"))),
+                PathBox::File(d) => ("f", String::from(d.to_str().unwrap_or("?")))
+            };
+            println!("depth={:03} type={} p={}", self.depth, tmp.0, tmp.1);
+        }
+        match d {
+            PathBox::File(f) => {
+                match ImgInfo::new(f) {
+                    Ok(i) => {
+                        if self.ignore_unknown_types {
+                            match i.file_type() {
+                                FileType::Other => {},
+                                _ => { controller.process(i); },
+                            }
+                        }
+                        else {
+                            controller.process(i);
+                        }
+                    },
+                    Err(e) => println!("Error processing file: {}", e)
+                }
+            },
+            PathBox::Directory(d) => {
+                if self.depth < self.max_depth {
+                    self.depth += 1;
+                    for child in d.read_dir().expect("Error reading path a directory!") {
+                        let child_path = child.expect("Error reading child!").path();
+                        self.scan_path_ch(PathBox::from(child_path), controller);
+                    }
+                    self.depth -= 1;
+                }
+            }
+        }
     }
 }

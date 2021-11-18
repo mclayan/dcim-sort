@@ -53,10 +53,14 @@ impl FileMetaProcessor for Rexiv2Processor {
             None
         }
     }
+
+    fn clone_boxed(&self) -> Box<dyn FileMetaProcessor + Send> {
+        Rexiv2Processor::new()
+    }
 }
 
 impl Rexiv2Processor {
-    pub fn new() -> Box<dyn FileMetaProcessor> {
+    pub fn new() -> Box<dyn FileMetaProcessor + Send> {
         Box::new(Rexiv2Processor{})
     }
 

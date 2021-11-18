@@ -27,6 +27,7 @@ pub struct FileMetaType {
 pub trait FileMetaProcessor {
     fn supports(&self, mt: &MetaType, ft: &FileType) -> bool;
     fn read_metadata(&self, file: &Path) -> Option<ImgMeta>;
+    fn clone_boxed(&self) -> Box<dyn FileMetaProcessor + Send>;
 }
 
 
