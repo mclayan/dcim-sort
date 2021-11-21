@@ -4,9 +4,16 @@ mod pattern;
 mod media;
 mod config;
 mod pipeline;
+mod logging;
 
-use clap::{App, Arg};
 use std::path::{PathBuf, Path};
+use std::fs::File;
+use std::sync::atomic::Ordering::AcqRel;
+use std::ops::Index;
+use std::any::{type_name, Any};
+use std::time;
+use std::thread;
+use std::sync::mpsc;
 use crate::index::Scanner;
 use crate::sorting::{Sorter, SorterBuilder, Strategy};
 use crate::pattern::device::{MakeModelPattern, DevicePart, CaseNormalization};
@@ -16,14 +23,11 @@ use crate::media::metadata_processor::{MetaProcessor, MetaProcessorBuilder, Prio
 use crate::media::rexiv_proc::Rexiv2Processor;
 use crate::media::kadamak_exif::KadamakExifProcessor;
 use crate::config::{RootCfg};
-use std::fs::File;
-use std::sync::atomic::Ordering::AcqRel;
-use std::ops::Index;
-use std::any::{type_name, Any};
-use std::time;
-use chrono::Duration;
 use crate::pattern::PatternElement;
-use crate::pipeline::{Pipeline, PipelineController};
+use crate::pipeline::{ControlMsg, Pipeline, PipelineController};
+use clap::{App, Arg};
+use chrono::Duration;
+use crate::logging::{Logger, LogReq};
 
 
 enum Operation {
@@ -51,6 +55,12 @@ fn main() {
     }
 
     let outdir = PathBuf::from(&args.target_root);
+    // init logger
+    let mut logger = Logger::new(&outdir, Option::None).unwrap();
+    let (tx_log, rx_log) = mpsc::channel::<LogReq>();
+    let logger_handle = thread::spawn(move || {
+        logger.run(rx_log);
+    });
 
     let mut sorter = match &args.config_path {
         Some(cfg) => {
@@ -58,7 +68,7 @@ fn main() {
             root_cfg.generate_sorter_builder(outdir).expect("Failed to read configuration!")
         }
         None => generate_default_sorter(outdir)
-    };
+    }.log(tx_log.clone());
 
     let meta_processor = MetaProcessor::new()
         .processor(Rexiv2Processor::new(), Priority::None)
@@ -67,6 +77,16 @@ fn main() {
 
     if !args.dry_run {
         process_files(args, sorter, meta_processor);
+    }
+
+    // shutdown logger
+    let (tx_cb, rx_cb) = mpsc::channel::<ControlMsg>();
+    tx_log.send(LogReq::Cmd(ControlMsg::Shutdown(tx_cb)));
+    if let Err(err) = rx_cb.recv_timeout(core::time::Duration::from_millis(5000)) {
+        eprintln!("[WARN] timeout while waiting for logger to close!");
+    }
+    else {
+        logger_handle.join();
     }
 }
 
@@ -94,6 +114,7 @@ fn process_files(args: MArgs, sorter: SorterBuilder, meta_processor: MetaProcess
         Operation::Copy => Strategy::Copy,
         Operation::Simulate => Strategy::Print
     };
+
     let mut pipeline = PipelineController::new(
         args.thread_count,
         meta_processor,

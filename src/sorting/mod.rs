@@ -1,11 +1,14 @@
 pub mod fs_support;
 
+use std::fmt::format;
 use std::path::{PathBuf, Path};
 use std::fs::{File};
 use std::io::Error;
 use std::rc::Rc;
 use std::sync::mpsc;
 use std::sync::mpsc::{RecvError, Sender};
+use crate::logging::LogMsg;
+use crate::LogReq;
 use crate::pattern::{PatternElement};
 use crate::media::{ImgInfo, FileType};
 use crate::pipeline::{ControlMsg, Report, Request};
@@ -43,7 +46,9 @@ pub struct Sorter {
     dirs_to_create: Vec<String>,
     rx_callback: mpsc::Receiver<bool>,
     tx_callback: mpsc::Sender<bool>,
-    tx_dir_creation: mpsc::Sender<DirCreationRequest>
+    tx_dir_creation: mpsc::Sender<DirCreationRequest>,
+    log: Option<mpsc::Sender<LogReq>>,
+    log_id: String,
 }
 
 pub struct SorterBuilder {
@@ -51,13 +56,26 @@ pub struct SorterBuilder {
     fallback_segments: Vec<Box<dyn PatternElement + Send>>,
     dup_handling: DuplicateResolution,
     target_root: PathBuf,
+    log: Option<mpsc::Sender<LogReq>>,
+    build_count: u32
 }
 
 impl SorterBuilder {
+    fn generate_log_id(&mut self) -> String {
+        let id = format!("sorter@{:02}", self.build_count);
+        self.build_count += 1;
+        id
+    }
+
     /// Add a segment pattern to the internal vec of segments for sorting
     /// files with supported metadata.
     pub fn segment(mut self, s: Box<dyn PatternElement + Send>) -> SorterBuilder {
         self.push_segment_supported(s);
+        self
+    }
+
+    pub fn log(mut self, log: mpsc::Sender<LogReq>) -> SorterBuilder {
+        self.log = Some(log);
         self
     }
 
@@ -83,9 +101,10 @@ impl SorterBuilder {
         self.fallback_segments.push(s);
     }
 
-    pub fn build(self, dir_creation_tx: mpsc::Sender<DirCreationRequest>) -> Sorter {
+    pub fn build(mut self, dir_creation_tx: mpsc::Sender<DirCreationRequest>) -> Sorter {
         let (tx, rx) = mpsc::channel::<bool>();
         let segs = self.clone_segs();
+        let log_id = self.generate_log_id();
         Sorter {
             segments: segs.0,
             fallback_segments: segs.1,
@@ -98,11 +117,13 @@ impl SorterBuilder {
             dirs_to_create: Vec::new(),
             rx_callback: rx,
             tx_callback: tx,
-            tx_dir_creation: dir_creation_tx
+            tx_dir_creation: dir_creation_tx,
+            log: self.log,
+            log_id: log_id
         }
     }
 
-    pub fn build_clone(&self, dir_creation_tx: mpsc::Sender<DirCreationRequest>) -> Sorter {
+    pub fn build_clone(&mut self, dir_creation_tx: mpsc::Sender<DirCreationRequest>) -> Sorter {
         let (tx, rx) = mpsc::channel::<bool>();
         let segs = self.clone_segs();
         Sorter {
@@ -117,7 +138,9 @@ impl SorterBuilder {
             dirs_to_create: Vec::new(),
             rx_callback: rx,
             tx_callback: tx,
-            tx_dir_creation: dir_creation_tx
+            tx_dir_creation: dir_creation_tx,
+            log: self.log.clone(),
+            log_id: self.generate_log_id()
         }
     }
 
@@ -148,6 +171,8 @@ impl Sorter {
             fallback_segments: Vec::new(),
             dup_handling: DuplicateResolution::Compare(Comparison::Rename),
             target_root: target_dir.clone(),
+            log: None,
+            build_count: 0
         }
     }
 
@@ -281,6 +306,13 @@ impl Sorter {
         }
         else {
             self.skipped_files += 1;
+            if let Some(log) = &self.log {
+                let log_msg = format!("{} -> {}: file exists",
+                                      img.path().to_str().unwrap_or("<INVALID UTF-8>"),
+                                      target.to_str().unwrap_or("<INVALID UTF-8>")
+                );
+                log.send(LogReq::Msg(LogMsg::new(self.log_id.clone(), log_msg))).expect("failed to send log message!");
+            }
         }
     }
 
@@ -329,6 +361,7 @@ impl Sorter {
         let m1 = file1.metadata().expect("Failed to read metadata!");
         let m2 = file2.metadata().expect("Failed to read metadata!");
 
+        // todo: make this optional
         let d1 = m1.modified().expect("Failed to read modified time!");
         let d2 = m2.modified().expect("Failed to read modified time!");
 

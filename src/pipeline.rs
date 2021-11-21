@@ -4,6 +4,7 @@ use std::sync::mpsc;
 use std::sync::mpsc::Sender;
 use std::thread;
 use std::thread::{current, JoinHandle};
+use crate::LogReq;
 use crate::media::ImgInfo;
 use crate::media::metadata_processor::{MetaProcessor, MetaProcessorBuilder};
 use crate::pipeline::ControlMsg::Shutdown;
@@ -55,7 +56,7 @@ impl Pipeline {
         Pipeline {
             processor,
             sorter,
-            sorting_strategy,
+            sorting_strategy
         }
     }
 
@@ -107,7 +108,7 @@ pub struct PipelineController {
 }
 
 impl PipelineController {
-    pub fn new(thread_count: usize, proc_cfg: MetaProcessorBuilder, sorter_cfg: SorterBuilder, sorting_strategy: Strategy) -> PipelineController {
+    pub fn new(thread_count: usize, proc_cfg: MetaProcessorBuilder, mut sorter_cfg: SorterBuilder, sorting_strategy: Strategy) -> PipelineController {
         let mut threads = Vec::with_capacity(thread_count);
 
         let (tx_dm, rx_dm) = mpsc::channel::<DirCreationRequest>();
