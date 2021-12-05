@@ -206,13 +206,18 @@ impl Sorter {
 
         let do_execute = match target.exists() {
             true => {
+                // target exists, handle duplicate
                 self.duplicate_counter += 1;
                 match &self.dup_handling {
+                    // duplicate files are ignored and remain in the source dir
                     DuplicateResolution::Ignore => { false }
+                    // duplicate files are overwritten without comparing
                     DuplicateResolution::Overwrite => { true }
+                    // duplicate files are compared and handled according to Comparison policy
                     DuplicateResolution::Compare(c) => {
                         if Sorter::check_files_matching(img.path(), target.as_path()) {
                             match c {
+                                // try to mutate target filename to keep both files
                                 Comparison::Rename => {
                                     if let Some(t) = Sorter::find_dup_free_name(destination.as_path(), filename) {
                                         target = t;
@@ -222,7 +227,9 @@ impl Sorter {
                                         false
                                     }
                                 }
+                                // target should be favored, do not proceed
                                 Comparison::FavorTarget => { false }
+                                // source should be favored, overwrite target
                                 Comparison::FavorSource => { true }
                             }
                         }
@@ -232,75 +239,17 @@ impl Sorter {
                     }
                 }
             }
+            // target doesn't exist, proceed
             false => true
         };
 
         if do_execute {
-            if !destination.exists() {
-                let req = DirCreationRequest::new(&destination, self.tx_callback.clone());
-                self.tx_dir_creation.send(req);
-                match self.rx_callback.recv() {
-                    Ok(b) => {
-                        match b {
-                            true => (),
-                            false => eprintln!("failed to create destination dir: {}", destination.to_str().unwrap_or("<INVALID_UTF-8>"))
-                        }
-                    }
-                    Err(e) => {
-                        panic!("Could not receive callback from DirManager: {}", e);
-                    }
-                }
-                if matches!(strategy, Strategy::Print) {
-                    self.dirs_to_create.push(String::from(destination.to_str().unwrap_or("<INVALID_UTF-8>")));
-                }
-                /*
-                match strategy {
-                    Strategy::Copy | Strategy::Move => {
-                        match std::fs::create_dir_all(destination) {
-                            Err(e) => {
-                                println!("Failed to create destination directory: {}", e);
-                                return;
-                            }
-                            Ok(_) => { self.created_dirs += 1 }
-                        }
-                    }
-                    _ => {
-                        let path_str = String::from(destination.to_str().unwrap_or("INVALID_UTF-8"));
-                        if !self.dirs_to_create.contains(&path_str) {
-                            self.dirs_to_create.push(path_str);
-                        }
-                    }
-                }
-                 */
-            }
-            let result: Result<Option<u64>, Error> = match strategy {
-                Strategy::Copy => {
-                    match Sorter::copy_file(target.as_path(), img.path()) {
-                        Ok(i) => Ok(Some(i)),
-                        Err(e) => Err(e)
-                    }
-                },
-                Strategy::Move => {
-                    match Sorter::move_file(target, img.path()) {
-                        Ok(_) => Ok(None),
-                        Err(e) => Err(e)
-                    }
-                },
-                Strategy::Print => {
-                    println!("{} -> {}",
-                             img.path().to_str().unwrap_or("INVALID_UTF-8"),
-                             target.to_str().unwrap_or("INVALID_UTF-8")
-                    );
-                    Ok(None)
-                }
-            };
-            match result {
-                Ok(_) => { self.sorted_files += 1; },
+            match self.execute(img, destination, target, strategy) {
+                Ok(_) => (),
                 Err(e) => {
-                    eprintln!("[Sorter] Error sorting file {}: {}", img.path().to_str().unwrap_or("INVALID_UTF-8"), e);
+                    eprintln!("Failed to execute: {}", e);
                 }
             }
-
         }
         else {
             self.skipped_files += 1;
@@ -310,6 +259,73 @@ impl Sorter {
                                       target.to_str().unwrap_or("<INVALID UTF-8>")
                 );
                 log.send(LogReq::Msg(LogMsg::new(self.log_id.clone(), log_msg))).expect("failed to send log message!");
+            }
+        }
+    }
+
+    fn execute(&mut self, img: &ImgInfo, destination: PathBuf, target: PathBuf, strategy: Strategy) -> Result<(), String> {
+        if !destination.exists() {
+            if self.create_dir(&destination) == false {
+                eprintln!("[WARN] received negative creation confirmation for target_dir=\"{}\"",
+                          destination.to_str().unwrap_or("<INVALID UTF-8>")
+                );
+            }
+            if matches!(strategy, Strategy::Print) {
+                self.dirs_to_create.push(String::from(destination.to_str().unwrap_or("<INVALID_UTF-8>")));
+            }
+        }
+        let result: Result<Option<u64>, Error> = match strategy {
+            Strategy::Copy => {
+                match Sorter::copy_file(target.as_path(), img.path()) {
+                    Ok(i) => Ok(Some(i)),
+                    Err(e) => Err(e)
+                }
+            },
+            Strategy::Move => {
+                match Sorter::move_file(target, img.path()) {
+                    Ok(_) => Ok(None),
+                    Err(e) => Err(e)
+                }
+            },
+            Strategy::Print => {
+                println!("{} -> {}",
+                         img.path().to_str().unwrap_or("INVALID_UTF-8"),
+                         target.to_str().unwrap_or("INVALID_UTF-8")
+                );
+                Ok(None)
+            }
+        };
+        match result {
+            Ok(_) => {
+                self.sorted_files += 1;
+                Ok(())
+            },
+            Err(e) => {
+                Err(format!("Failed to sort file from src=\"{}\": {}",
+                    img.path().to_str().unwrap_or("INVALID_UTF-8"),
+                    e
+                ))
+                //eprintln!("[Sorter] Error sorting file {}: {}", img.path().to_str().unwrap_or("INVALID_UTF-8"), e);
+            }
+        }
+    }
+
+    /// request DirManager to create the destination directory, waits for confirmation
+    fn create_dir(&self, destination: &PathBuf) -> bool {
+        let req = DirCreationRequest::new(destination, self.tx_callback.clone());
+        self.tx_dir_creation.send(req).expect("could not send dir creation request!");
+        match self.rx_callback.recv() {
+            Ok(b) => {
+                match b {
+                    true => true,
+                    false => {
+                        eprintln!("failed to create destination dir: {}", destination.to_str().unwrap_or("<INVALID_UTF-8>"));
+                        false
+                    }
+                }
+            }
+            Err(e) => {
+                panic!("Could not receive callback from DirManager: {}", e);
             }
         }
     }

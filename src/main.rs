@@ -77,12 +77,12 @@ fn main() {
 
     // shutdown logger
     let (tx_cb, rx_cb) = mpsc::channel::<ControlMsg>();
-    tx_log.send(LogReq::Cmd(ControlMsg::Shutdown(tx_cb)));
+    tx_log.send(LogReq::Cmd(ControlMsg::Shutdown(tx_cb))).expect("failed to send shutdown command to logger!");
     if let Err(_) = rx_cb.recv_timeout(core::time::Duration::from_millis(5000)) {
         eprintln!("[WARN] timeout while waiting for logger to close!");
     }
     else {
-        logger_handle.join();
+        logger_handle.join().expect("could not join logger thread!");
     }
 }
 
