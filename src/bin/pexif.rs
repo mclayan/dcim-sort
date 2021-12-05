@@ -2,11 +2,10 @@ extern crate exif;
 
 use std::fs::File;
 use std::io::BufReader;
-use clap::{App, Arg};
 use std::path::Path;
 use std::time::SystemTime;
 
-
+use clap::{App, Arg};
 
 fn main() {
     let matches = App::new("pexif - Print EXIF data")

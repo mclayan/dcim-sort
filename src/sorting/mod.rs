@@ -1,18 +1,16 @@
-pub mod fs_support;
-
-use std::fmt::format;
-use std::path::{PathBuf, Path};
-use std::fs::{File};
+use std::fs::File;
 use std::io::Error;
-use std::rc::Rc;
+use std::path::{Path, PathBuf};
 use std::sync::mpsc;
-use std::sync::mpsc::{RecvError, Sender};
+
 use crate::logging::LogMsg;
 use crate::LogReq;
-use crate::pattern::{PatternElement};
-use crate::media::{ImgInfo, FileType};
-use crate::pipeline::{ControlMsg, Report, Request};
+use crate::media::{FileType, ImgInfo};
+use crate::pattern::PatternElement;
+use crate::pipeline::Report;
 use crate::sorting::fs_support::DirCreationRequest;
+
+pub mod fs_support;
 
 #[derive(Clone, Copy)]
 pub enum Strategy {

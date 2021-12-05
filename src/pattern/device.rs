@@ -1,6 +1,5 @@
-use std::rc::Rc;
-use crate::pattern::{PatternElement};
 use crate::media::ImgInfo;
+use crate::pattern::PatternElement;
 
 #[derive(Clone)]
 pub enum DevicePart {
@@ -69,7 +68,7 @@ impl MakeModelPattern {
     }
 
     fn normalize_case(&self, s: String) -> String {
-        let mut result = match self.case {
+        let result = match self.case {
             CaseNormalization::Lowercase => s.to_lowercase(),
             CaseNormalization::Uppercase => s.to_uppercase(),
             CaseNormalization::None => s

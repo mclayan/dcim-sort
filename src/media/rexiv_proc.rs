@@ -1,7 +1,9 @@
-use crate::media::{FileMetaProcessor, MetaType, ImgMeta, FileType};
 use std::path::Path;
+
+use chrono::{DateTime, Local, NaiveDateTime, TimeZone};
 use rexiv2::Metadata;
-use chrono::{DateTime, Local, TimeZone, NaiveDateTime};
+
+use crate::media::{FileMetaProcessor, FileType, ImgMeta, MetaType};
 
 const EXIF_DATETIME_RX: &str = "^\\d{4}:\\d{2}:\\d{2} \\d{2}:\\d{2}:\\d{2}$";
 const EXIF_DATETIME_FMT: &str = "%Y:%m:%d %T";
@@ -134,8 +136,8 @@ impl Rexiv2Processor {
 mod tests {
 
     mod supports {
+        use crate::media::{FileType, MetaType};
         use crate::media::rexiv_proc::Rexiv2Processor;
-        use crate::media::{MetaType, FileType};
 
         #[test]
         fn decline_heif() {

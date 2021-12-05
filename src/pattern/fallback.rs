@@ -1,6 +1,5 @@
-use std::rc::Rc;
-use crate::pattern::PatternElement;
 use crate::media::ImgInfo;
+use crate::pattern::PatternElement;
 
 enum GeneralFileType {
     Video,

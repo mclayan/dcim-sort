@@ -1,9 +1,11 @@
-use crate::media::{FileMetaProcessor, MetaType, ImgMeta, TagParseError, FileType};
-use std::path::{Path};
 use std::fs;
 use std::io::BufReader;
+use std::path::Path;
+
 use chrono::{DateTime, Local, TimeZone};
 use exif::Value;
+
+use crate::media::{FileMetaProcessor, FileType, ImgMeta, MetaType, TagParseError};
 
 pub struct KadamakExifProcessor {
 

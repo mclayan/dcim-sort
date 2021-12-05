@@ -1,12 +1,14 @@
-use std::path::{Path, PathBuf};
-use std::{fs, io, env};
+use std::{fs, io};
 use std::fs::{File, OpenOptions};
 use std::io::{BufWriter, Write};
+use std::path::PathBuf;
 use std::sync::mpsc;
 use std::sync::mpsc::Sender;
 use std::time::Duration;
+
 use chrono;
 use chrono::{Datelike, SecondsFormat};
+
 use crate::pipeline::ControlMsg;
 
 pub enum LogReq {
@@ -76,7 +78,7 @@ impl Logger {
             Ok(file) => {
                 Some(BufWriter::new(file))
             }
-            Err(e) => {
+            Err(_) => {
                 eprintln!("[WARN] failed to open log file: {}",
                           &self.outfile.to_str().unwrap_or("<INVALID UTF-8>")
                 );
@@ -147,12 +149,13 @@ impl Logger {
     }
 
     fn write_msg(&self, buf: &mut BufWriter<File>, msg: LogMsg) {
-        if self.print_sender {
-            write!(buf, "[{}] {}\n", msg.sender, msg.msg);
-        }
-        else {
-            write!(buf, "{}\n", msg.msg);
-        }
+        match match self.print_sender {
+            true  => write!(buf, "[{}] {}\n", msg.sender, msg.msg),
+            false => write!(buf, "{}\n", msg.msg)
+        } {
+            Ok(_) => (),
+            Err(err) => eprintln!("WARN: failed to write log message: {}", err)
+        };
     }
 
     fn print_msg(&self, msg: LogMsg) {

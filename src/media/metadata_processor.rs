@@ -1,6 +1,4 @@
 use crate::media::{FileMetaProcessor, ImgInfo, MetaType};
-use std::sync::mpsc;
-use crate::pipeline::{Request, ControlMsg};
 
 pub struct MetaProcessor {
     processors: Vec<Box<dyn FileMetaProcessor + Send>>,
@@ -36,15 +34,8 @@ impl MetaProcessorBuilder {
         self
     }
 
-    pub fn build(mut self) -> MetaProcessor {
-        let mut processors = self.clone_procs();
-        MetaProcessor {
-            processors
-        }
-    }
-
     pub(crate) fn build_clone(&self) -> MetaProcessor {
-        let mut processors = self.clone_procs();
+        let processors = self.clone_procs();
 
         MetaProcessor {
             processors
@@ -52,7 +43,7 @@ impl MetaProcessorBuilder {
     }
 
     fn clone_procs(&self) -> Vec<Box<dyn FileMetaProcessor + Send>> {
-        let mut procs = Vec::<Box<dyn FileMetaProcessor + Send>>::with_capacity(self.proc_p_high.len() + self.proc_p_high.len() + self.proc_p_low.len());;
+        let mut procs = Vec::<Box<dyn FileMetaProcessor + Send>>::with_capacity(self.proc_p_high.len() + self.proc_p_high.len() + self.proc_p_low.len());
 
         for proc in &self.proc_p_high {
             procs.push(proc.clone_boxed());

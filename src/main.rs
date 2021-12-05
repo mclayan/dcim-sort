@@ -1,3 +1,23 @@
+use std::fs::File;
+use std::path::{Path, PathBuf};
+use std::sync::mpsc;
+use std::thread;
+use std::time;
+
+use clap::{App, Arg};
+
+use crate::config::RootCfg;
+use crate::index::Scanner;
+use crate::logging::{Logger, LogReq};
+use crate::media::kadamak_exif::KadamakExifProcessor;
+use crate::media::metadata_processor::{MetaProcessor, MetaProcessorBuilder, Priority};
+use crate::media::rexiv_proc::Rexiv2Processor;
+use crate::pattern::device::{CaseNormalization, DevicePart, MakeModelPattern};
+use crate::pattern::fallback::SimpleFileTypePattern;
+use crate::pattern::general::{DateTimePart, DateTimePattern, ScreenshotPattern};
+use crate::pipeline::{ControlMsg, PipelineController};
+use crate::sorting::{Sorter, SorterBuilder, Strategy};
+
 mod index;
 mod sorting;
 mod pattern;
@@ -5,30 +25,6 @@ mod media;
 mod config;
 mod pipeline;
 mod logging;
-
-use std::path::{PathBuf, Path};
-use std::fs::File;
-use std::sync::atomic::Ordering::AcqRel;
-use std::ops::Index;
-use std::any::{type_name, Any};
-use std::time;
-use std::thread;
-use std::sync::mpsc;
-use crate::index::Scanner;
-use crate::sorting::{Sorter, SorterBuilder, Strategy};
-use crate::pattern::device::{MakeModelPattern, DevicePart, CaseNormalization};
-use crate::pattern::general::{ScreenshotPattern, DateTimePattern, DateTimePart};
-use crate::pattern::fallback::{SimpleFileTypePattern};
-use crate::media::metadata_processor::{MetaProcessor, MetaProcessorBuilder, Priority};
-use crate::media::rexiv_proc::Rexiv2Processor;
-use crate::media::kadamak_exif::KadamakExifProcessor;
-use crate::config::{RootCfg};
-use crate::pattern::PatternElement;
-use crate::pipeline::{ControlMsg, Pipeline, PipelineController};
-use clap::{App, Arg};
-use chrono::Duration;
-use crate::logging::{Logger, LogReq};
-
 
 enum Operation {
     Move,
@@ -82,7 +78,7 @@ fn main() {
     // shutdown logger
     let (tx_cb, rx_cb) = mpsc::channel::<ControlMsg>();
     tx_log.send(LogReq::Cmd(ControlMsg::Shutdown(tx_cb)));
-    if let Err(err) = rx_cb.recv_timeout(core::time::Duration::from_millis(5000)) {
+    if let Err(_) = rx_cb.recv_timeout(core::time::Duration::from_millis(5000)) {
         eprintln!("[WARN] timeout while waiting for logger to close!");
     }
     else {

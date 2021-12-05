@@ -1,10 +1,11 @@
-use crate::config::seg_config::{MakeModelPatternCfg, ScreenshotPatternCfg, DateTimePatternCfg, SimpleFileTypePatternCfg};
-use minidom::Element;
-use crate::config::{CfgError, CfgValueError, SegmentConfig};
-use std::str::FromStr;
-use crate::sorting::{DuplicateResolution, Comparison, Sorter, SorterBuilder};
 use std::path::PathBuf;
-use std::rc::Rc;
+use std::str::FromStr;
+
+use minidom::Element;
+
+use crate::config::{CfgError, CfgValueError, SegmentConfig};
+use crate::config::seg_config::{DateTimePatternCfg, MakeModelPatternCfg, ScreenshotPatternCfg, SimpleFileTypePatternCfg};
+use crate::sorting::{Comparison, DuplicateResolution, Sorter, SorterBuilder};
 
 pub struct SorterCfg {
     supported: Vec<SegmentCfg>,

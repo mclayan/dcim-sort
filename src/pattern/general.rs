@@ -1,7 +1,7 @@
-use std::rc::Rc;
-use crate::pattern::PatternElement;
-use chrono::{DateTime, Local, Datelike, Timelike};
+use chrono::{Datelike, DateTime, Local, Timelike};
+
 use crate::media::ImgInfo;
+use crate::pattern::PatternElement;
 
 pub struct ScreenshotPattern {
     segment_name: String,

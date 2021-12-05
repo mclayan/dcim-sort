@@ -1,6 +1,7 @@
-use chrono::{DateTime, Local};
-use std::path::{PathBuf, Path};
 use std::io::{Error, ErrorKind};
+use std::path::{Path, PathBuf};
+
+use chrono::{DateTime, Local};
 
 //mod image;
 pub mod kadamak_exif;
@@ -211,8 +212,9 @@ impl ImgMeta {
 mod tests {
 
     mod img_meta_tests {
-        use crate::media::ImgMeta;
         use chrono::Local;
+
+        use crate::media::ImgMeta;
 
         #[test]
         fn merge_implements_all_fields() {

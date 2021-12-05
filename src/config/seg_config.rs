@@ -1,10 +1,11 @@
-use std::rc::Rc;
-use minidom::Element;
-use crate::config::{CfgError, CfgValueError, SegmentConfig};
-use crate::pattern::device::{MakeModelPattern, CaseNormalization, DevicePart};
 use std::str::FromStr;
-use crate::pattern::general::{ScreenshotPattern, DateTimePattern, DateTimePart};
+
+use minidom::Element;
+
+use crate::config::{CfgError, CfgValueError, SegmentConfig};
+use crate::pattern::device::{CaseNormalization, DevicePart, MakeModelPattern};
 use crate::pattern::fallback::SimpleFileTypePattern;
+use crate::pattern::general::{DateTimePart, DateTimePattern, ScreenshotPattern};
 use crate::pattern::PatternElement;
 
 pub struct SegPart {

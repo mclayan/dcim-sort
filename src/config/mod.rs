@@ -1,17 +1,18 @@
-mod sorter_config;
-mod seg_config;
-
-use minidom;
 use std::error::Error;
 use std::fmt::{Display, Formatter};
-use crate::pattern::PatternElement;
-use crate::config::sorter_config::SorterCfg;
-use minidom::Element;
 use std::fs::File;
 use std::io::Read;
-use crate::sorting::{Sorter, SorterBuilder};
 use std::path::PathBuf;
-use std::rc::Rc;
+
+use minidom;
+use minidom::Element;
+
+use crate::config::sorter_config::SorterCfg;
+use crate::pattern::PatternElement;
+use crate::sorting::SorterBuilder;
+
+mod sorter_config;
+mod seg_config;
 
 #[derive(Debug)]
 pub enum CfgError {

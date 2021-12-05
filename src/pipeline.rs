@@ -1,14 +1,12 @@
 use std::fmt::{Display, Formatter};
-use crate::index::Scanner;
 use std::sync::mpsc;
 use std::sync::mpsc::Sender;
 use std::thread;
-use std::thread::{current, JoinHandle};
-use crate::LogReq;
+use std::thread::JoinHandle;
+
 use crate::media::ImgInfo;
 use crate::media::metadata_processor::{MetaProcessor, MetaProcessorBuilder};
-use crate::pipeline::ControlMsg::Shutdown;
-use crate::sorting::{Sorter, SorterBuilder, Strategy, fs_support::DirManager};
+use crate::sorting::{fs_support::DirManager, Sorter, SorterBuilder, Strategy};
 use crate::sorting::fs_support::DirCreationRequest;
 
 pub struct Pipeline {
@@ -146,7 +144,7 @@ impl PipelineController {
         self.is_debug = true;
     }
 
-    pub fn process(&mut self, mut request: ImgInfo) {
+    pub fn process(&mut self, request: ImgInfo) {
         assert!(self.current_thread < self.threads.len());
         let (tx, _) = self.threads.get(self.current_thread).unwrap();
         match tx.send(Request::Input(request)) {

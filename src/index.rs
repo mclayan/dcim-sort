@@ -1,8 +1,8 @@
 use std::io::{Error, ErrorKind};
-use std::path::{PathBuf};
-use std::sync::mpsc;
-use crate::media::{ImgInfo, FileType};
-use crate::pipeline::{PipelineController, Request};
+use std::path::PathBuf;
+
+use crate::media::{FileType, ImgInfo};
+use crate::pipeline::{PipelineController};
 
 pub enum PathBox {
     Directory(PathBuf),
