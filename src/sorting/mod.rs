@@ -8,9 +8,11 @@ use crate::LogReq;
 use crate::media::{FileType, ImgInfo};
 use crate::pattern::PatternElement;
 use crate::pipeline::Report;
+use crate::sorting::comparison::FileComparer;
 use crate::sorting::fs_support::DirCreationRequest;
 
 pub mod fs_support;
+mod comparison;
 
 #[derive(Clone, Copy)]
 pub enum Strategy {
@@ -47,6 +49,7 @@ pub struct Sorter {
     tx_dir_creation: mpsc::Sender<DirCreationRequest>,
     log: Option<mpsc::Sender<LogReq>>,
     log_id: String,
+    comparer: FileComparer
 }
 
 pub struct SorterBuilder {
@@ -117,7 +120,8 @@ impl SorterBuilder {
             tx_callback: tx,
             tx_dir_creation: dir_creation_tx,
             log: self.log,
-            log_id: log_id
+            log_id: log_id,
+            comparer: FileComparer::default()
         }
     }
 
@@ -138,7 +142,8 @@ impl SorterBuilder {
             tx_callback: tx,
             tx_dir_creation: dir_creation_tx,
             log: self.log.clone(),
-            log_id: self.generate_log_id()
+            log_id: self.generate_log_id(),
+            comparer: FileComparer::default()
         }
     }
 
