@@ -1,4 +1,3 @@
-use std::fs::File;
 use std::io::Error;
 use std::path::{Path, PathBuf};
 use std::sync::mpsc;
@@ -8,14 +7,21 @@ use crate::LogReq;
 use crate::media::{FileType, ImgInfo};
 use crate::pattern::PatternElement;
 use crate::pipeline::Report;
-use crate::sorting::comparison::FileComparer;
+use crate::sorting::comparison::{Cause, ComparisonErr, FileComparer};
 use crate::sorting::fs_support::DirCreationRequest;
 
 pub mod fs_support;
 mod comparison;
 
+/// Sorting Operation to perform on files sorted.
+///
+/// # Variants
+///
+///  - Copy: copy the file only, leave original in the source folder
+///  - Move: move the source file to the target folder
+///  - Print: only print what the target file would be after pattern evaluation without doing anything
 #[derive(Clone, Copy)]
-pub enum Strategy {
+pub enum Operation {
     Copy,
     Move,
     Print
@@ -61,7 +67,16 @@ pub struct SorterBuilder {
     build_count: u32
 }
 
+enum PreCheckResult {
+    Execute,
+    Skip,
+    RenameTarget,
+    Error(String)
+}
+
 impl SorterBuilder {
+
+    /// Generates a unique ID for each sorter built for logging
     fn generate_log_id(&mut self) -> String {
         let id = format!("sorter@{:02}", self.build_count);
         self.build_count += 1;
@@ -75,6 +90,7 @@ impl SorterBuilder {
         self
     }
 
+    /// add a channel connected to a logger
     pub fn log(mut self, log: mpsc::Sender<LogReq>) -> SorterBuilder {
         self.log = Some(log);
         self
@@ -94,14 +110,17 @@ impl SorterBuilder {
         self
     }
 
+    /// add a supported path segment to the end of the list
     pub fn push_segment_supported(&mut self, s: Box<dyn PatternElement + Send>) {
         self.segments.push(s);
     }
 
+    /// add a fallback path segment to the end of the list
     pub fn push_segment_fallback(&mut self, s: Box<dyn PatternElement + Send>) {
         self.fallback_segments.push(s);
     }
 
+    /// consume the current builder and produce a single instance of a sorter
     pub fn build(mut self, dir_creation_tx: mpsc::Sender<DirCreationRequest>) -> Sorter {
         let (tx, rx) = mpsc::channel::<bool>();
         let segs = self.clone_segs();
@@ -125,6 +144,7 @@ impl SorterBuilder {
         }
     }
 
+    /// build a single sorter instance without consuming the builder
     pub fn build_clone(&mut self, dir_creation_tx: mpsc::Sender<DirCreationRequest>) -> Sorter {
         let (tx, rx) = mpsc::channel::<bool>();
         let segs = self.clone_segs();
@@ -164,10 +184,12 @@ impl SorterBuilder {
 }
 
 impl Sorter {
+    /// default duplicate handling strategy
     pub fn def_duplicate_handling() -> DuplicateResolution {
         DuplicateResolution::Ignore
     }
 
+    /// create a new builder configured with `target_dir` as the target root folder
     pub fn new(target_dir: PathBuf) -> SorterBuilder {
         SorterBuilder {
             segments: Vec::new(),
@@ -179,16 +201,17 @@ impl Sorter {
         }
     }
 
-    pub fn sort_all(&mut self, index: &Vec<ImgInfo>, strategy: Strategy) {
+    /// sort all items in `index` according to `operation`
+    pub fn sort_all(&mut self, index: &Vec<ImgInfo>, operation: Operation) {
         for info in index {
-            self.sort(info, strategy);
+            self.sort(info, operation);
         }
-        match strategy {
-            Strategy::Print => {
+        match operation {
+            Operation::Print => {
                 for dir in &self.dirs_to_create {
                     println!("mkdir: {}", dir);
                 }
-                println!("=======[ Simulation Report]=========");
+                println!("=======[ Simulation Report ]=========");
                 println!("total: {}\nfiles_sorted: {}\nfiles_skipped: {}\nduplicates: {}\ndirs_created: {}\n",
                          index.len(),
                          self.sorted_files,
@@ -201,7 +224,8 @@ impl Sorter {
         };
     }
 
-    pub fn sort(&mut self, img: &ImgInfo, strategy: Strategy) {
+    /// sort a single source file
+    pub fn sort(&mut self, img: &ImgInfo, operation: Operation) {
         let destination = self.translate(img);
         let mut target = destination.clone();
         let filename = img.path()
@@ -209,90 +233,75 @@ impl Sorter {
             .to_str().expect("filename is not a valid UTF-8 str!");
         target.push(filename);
 
-        let do_execute = match target.exists() {
-            true => {
-                // target exists, handle duplicate
-                self.duplicate_counter += 1;
-                match &self.dup_handling {
-                    // duplicate files are ignored and remain in the source dir
-                    DuplicateResolution::Ignore => { false }
-                    // duplicate files are overwritten without comparing
-                    DuplicateResolution::Overwrite => { true }
-                    // duplicate files are compared and handled according to Comparison policy
-                    DuplicateResolution::Compare(c) => {
-                        if Sorter::check_files_matching(img.path(), target.as_path()) {
-                            match c {
-                                // try to mutate target filename to keep both files
-                                Comparison::Rename => {
-                                    if let Some(t) = Sorter::find_dup_free_name(destination.as_path(), filename) {
-                                        target = t;
-                                        true
-                                    }
-                                    else {
-                                        false
-                                    }
-                                }
-                                // target should be favored, do not proceed
-                                Comparison::FavorTarget => { false }
-                                // source should be favored, overwrite target
-                                Comparison::FavorSource => { true }
-                            }
-                        }
-                        else {
-                            false
-                        }
-                    }
-                }
-            }
-            // target doesn't exist, proceed
-            false => true
-        };
+        let precheck_result = self.evaluate_execution(img.path(), target.as_path());
 
-        if do_execute {
-            match self.execute(img, destination, target, strategy) {
-                Ok(_) => (),
-                Err(e) => {
-                    eprintln!("Failed to execute: {}", e);
+        match precheck_result {
+            PreCheckResult::Execute => {
+                match self.execute(img, destination, target, operation) {
+                    Ok(_) => (),
+                    Err(e) => self.log_msg(format!("Failed to execute: {}", e))
                 }
-            }
-        }
-        else {
-            self.skipped_files += 1;
-            if let Some(log) = &self.log {
-                let log_msg = format!("{} -> {}: file exists",
+            },
+            PreCheckResult::Skip => {
+                self.skipped_files += 1;
+                let log_msg = format!("{} -> {}: file exists, skipping",
                                       img.path().to_str().unwrap_or("<INVALID UTF-8>"),
                                       target.to_str().unwrap_or("<INVALID UTF-8>")
                 );
-                log.send(LogReq::Msg(LogMsg::new(self.log_id.clone(), log_msg))).expect("failed to send log message!");
+                self.log_msg(log_msg);
+            }
+            PreCheckResult::RenameTarget => {
+                if let Some(t) = Sorter::find_dup_free_name(destination.as_path(), filename) {
+                    target = t;
+                    match self.execute(img, destination, target, operation) {
+                        Ok(_) => (),
+                        Err(e) => self.log_msg(format!("Failed to execute: {}", e))
+                    }
+                }
+            }
+            PreCheckResult::Error(e) => {
+                let msg = format!("Error comparing files: {}", e);
+                self.log_msg(msg);
             }
         }
     }
 
-    fn execute(&mut self, img: &ImgInfo, destination: PathBuf, target: PathBuf, strategy: Strategy) -> Result<(), String> {
+    fn log_msg(&self, msg: String) {
+        if let Some(log) = &self.log {
+            match log.send(LogReq::Msg(LogMsg::new(self.log_id.clone(), msg))) {
+                Ok(_) => (),
+                Err(e) => {
+                    eprintln!("Failed to log message: {}", e);
+                }
+            }
+        }
+    }
+
+    fn execute(&mut self, img: &ImgInfo, destination: PathBuf, target: PathBuf, operation: Operation) -> Result<(), String> {
         if !destination.exists() {
             if self.create_dir(&destination) == false {
                 eprintln!("[WARN] received negative creation confirmation for target_dir=\"{}\"",
                           destination.to_str().unwrap_or("<INVALID UTF-8>")
                 );
             }
-            if matches!(strategy, Strategy::Print) {
+            if matches!(operation, Operation::Print) {
                 self.dirs_to_create.push(String::from(destination.to_str().unwrap_or("<INVALID_UTF-8>")));
             }
         }
-        let result: Result<Option<u64>, Error> = match strategy {
-            Strategy::Copy => {
+        let result: Result<Option<u64>, Error> = match operation {
+            Operation::Copy => {
                 match Sorter::copy_file(target.as_path(), img.path()) {
                     Ok(i) => Ok(Some(i)),
                     Err(e) => Err(e)
                 }
             },
-            Strategy::Move => {
+            Operation::Move => {
                 match Sorter::move_file(target, img.path()) {
                     Ok(_) => Ok(None),
                     Err(e) => Err(e)
                 }
             },
-            Strategy::Print => {
+            Operation::Print => {
                 println!("{} -> {}",
                          img.path().to_str().unwrap_or("INVALID_UTF-8"),
                          target.to_str().unwrap_or("INVALID_UTF-8")
@@ -310,7 +319,46 @@ impl Sorter {
                     img.path().to_str().unwrap_or("INVALID_UTF-8"),
                     e
                 ))
-                //eprintln!("[Sorter] Error sorting file {}: {}", img.path().to_str().unwrap_or("INVALID_UTF-8"), e);
+            }
+        }
+    }
+
+    fn evaluate_execution(&self, src: &Path, target: &Path) -> PreCheckResult {
+        if !src.is_file() {
+            return PreCheckResult::Error(
+                format!("source file does not exist: {}",
+                        src.to_str().unwrap_or("<INVALID_UTF-8>")
+                )
+            );
+        }
+        if !target.exists() {
+            return PreCheckResult::Execute;
+        }
+
+        // both src and target exist, evaluate strategy
+        match &self.dup_handling {
+            // duplicate files are ignored and remain in the source dir
+            DuplicateResolution::Ignore => PreCheckResult::Skip,
+            // duplicate files are overwritten without comparing
+            DuplicateResolution::Overwrite => PreCheckResult::Execute,
+            // duplicate files are compared and handled according to Comparison policy
+            DuplicateResolution::Compare(c) => {
+                match self.comparer.check_files_matching(src, target) {
+                    Ok(b) => match b {
+                        // files match, no need to do anything
+                        true => PreCheckResult::Skip,
+                        // files differ, check policy
+                        false => match c {
+                            // rename target to keep both files
+                            Comparison::Rename => PreCheckResult::RenameTarget,
+                            // favour target, skip
+                            Comparison::FavorTarget => PreCheckResult::Skip,
+                            // overwrite target with source
+                            Comparison::FavorSource => PreCheckResult::Execute
+                        }
+                    },
+                    Err(e) => PreCheckResult::Error(Self::create_cmp_err_msg(e, src, target))
+                }
             }
         }
     }
@@ -371,22 +419,48 @@ impl Sorter {
         dest
     }
 
-    fn check_files_matching(f1: &Path, f2: &Path) -> bool {
-        assert!(f1.is_file());
-        assert!(f2.is_file());
-        let file1 = File::open(f1).expect("Could not open file!");
-        let file2 = File::open(f2).expect("Could not open file!");
+    fn create_cmp_err_msg(e: ComparisonErr, f1: &Path, f2: &Path) -> String {
+        let mut cause: Option<&Path> = None;
+        let mut msg: Option<String> = None;
+        match e {
+            ComparisonErr::AccessDenied(c) => {
+                cause = match c {
+                    Cause::Source => Some(f1),
+                    Cause::Target => Some(f2),
+                    Cause::NA => None
+                };
+                msg = Some(String::from("access is denied"));
+            }
+            ComparisonErr::InvalidFile(c) => {
+                cause = match c {
+                    Cause::Source => Some(f1),
+                    Cause::Target => Some(f2),
+                    Cause::NA => None
+                };
+                msg = Some(String::from("file not found"))
+            }
+            ComparisonErr::Metadata(c) => {
+                cause = match c {
+                    Cause::Source => Some(f1),
+                    Cause::Target => Some(f2),
+                    Cause::NA => None
+                };
+                msg = Some(String::from("file metadata could not be read"))
+            }
+            ComparisonErr::Other(c, m) => {
+                cause = match c {
+                    Cause::Source => Some(f1),
+                    Cause::Target => Some(f2),
+                    Cause::NA => None
+                };
+                msg = m;
+            }
+        }
 
-        let m1 = file1.metadata().expect("Failed to read metadata!");
-        let m2 = file2.metadata().expect("Failed to read metadata!");
-
-        // todo: make this optional
-        let d1 = m1.modified().expect("Failed to read modified time!");
-        let d2 = m2.modified().expect("Failed to read modified time!");
-
-        d1 == d2 && m1.len() == m2.len()
-
-        // todo: calculate checksum for comparison if sizes match
+        format!("error accessing file=\"{}\": {}",
+            cause.unwrap().to_str().unwrap_or("<INVALID_UTF-8>"),
+            msg.unwrap()
+        )
     }
 
     fn find_dup_free_name(target_folder: &Path, filename: &str) -> Option<PathBuf> {

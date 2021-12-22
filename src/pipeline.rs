@@ -6,13 +6,13 @@ use std::thread::JoinHandle;
 
 use crate::media::ImgInfo;
 use crate::media::metadata_processor::{MetaProcessor, MetaProcessorBuilder};
-use crate::sorting::{fs_support::DirManager, Sorter, SorterBuilder, Strategy};
+use crate::sorting::{fs_support::DirManager, Sorter, SorterBuilder, Operation};
 use crate::sorting::fs_support::DirCreationRequest;
 
 pub struct Pipeline {
     processor: MetaProcessor,
     sorter: Sorter,
-    sorting_strategy: Strategy,
+    sorting_operation: Operation,
 }
 
 pub enum ControlMsg {
@@ -50,11 +50,11 @@ impl Display for Report {
 
 impl Pipeline {
 
-    pub fn new(processor: MetaProcessor, sorter: Sorter, sorting_strategy: Strategy) -> Pipeline {
+    pub fn new(processor: MetaProcessor, sorter: Sorter, sorting_operation: Operation) -> Pipeline {
         Pipeline {
             processor,
             sorter,
-            sorting_strategy
+            sorting_operation
         }
     }
 
@@ -94,7 +94,7 @@ impl Pipeline {
         self.processor.process(&mut req);
 
         // sort file
-        self.sorter.sort(&req, self.sorting_strategy);
+        self.sorter.sort(&req, self.sorting_operation);
     }
 }
 
@@ -106,13 +106,13 @@ pub struct PipelineController {
 }
 
 impl PipelineController {
-    pub fn new(thread_count: usize, proc_cfg: MetaProcessorBuilder, mut sorter_cfg: SorterBuilder, sorting_strategy: Strategy) -> PipelineController {
+    pub fn new(thread_count: usize, proc_cfg: MetaProcessorBuilder, mut sorter_cfg: SorterBuilder, sorting_operation: Operation) -> PipelineController {
         let mut threads = Vec::with_capacity(thread_count);
 
         let (tx_dm, rx_dm) = mpsc::channel::<DirCreationRequest>();
         let dm_handle = thread::spawn(move || {
-            let mut dm = match &sorting_strategy {
-                Strategy::Print => DirManager::new_simulating(),
+            let mut dm = match &sorting_operation {
+                Operation::Print => DirManager::new_simulating(),
                 _               => DirManager::new()
             };
             dm.run(rx_dm);
@@ -122,7 +122,7 @@ impl PipelineController {
             let (tx, rx) = mpsc::channel::<Request<ImgInfo>>();
             let processor = proc_cfg.build_clone();
             let sorter = sorter_cfg.build_clone(tx_dm.clone());
-            let mut pipeline = Pipeline::new(processor, sorter, sorting_strategy.clone());
+            let mut pipeline = Pipeline::new(processor, sorter, sorting_operation.clone());
             let t = thread::spawn(move || {
                 pipeline.run(rx);
             });

@@ -16,7 +16,7 @@ use crate::pattern::device::{CaseNormalization, DevicePart, MakeModelPattern};
 use crate::pattern::fallback::SimpleFileTypePattern;
 use crate::pattern::general::{DateTimePart, DateTimePattern, ScreenshotPattern};
 use crate::pipeline::{ControlMsg, PipelineController};
-use crate::sorting::{Sorter, SorterBuilder, Strategy};
+use crate::sorting::{Sorter, SorterBuilder, Operation};
 
 mod index;
 mod sorting;
@@ -26,11 +26,6 @@ mod config;
 mod pipeline;
 mod logging;
 
-enum Operation {
-    Move,
-    Copy,
-    Simulate
-}
 
 struct MArgs {
     file: String,
@@ -105,17 +100,11 @@ fn process_files(args: MArgs, sorter: SorterBuilder, meta_processor: MetaProcess
     scanner.debug(args.debug > 1);
     scanner.ignore_unknown_types(args.ignore_unknown_types);
 
-    let strategy = match args.operation {
-        Operation::Move => Strategy::Move,
-        Operation::Copy => Strategy::Copy,
-        Operation::Simulate => Strategy::Print
-    };
-
     let mut pipeline = PipelineController::new(
         args.thread_count,
         meta_processor,
         sorter,
-        strategy
+        args.operation
     );
 
     if args.debug > 0 {
@@ -232,7 +221,7 @@ fn parse_args() -> MArgs {
     };
 
     let operation = match matches.subcommand_name().expect("Missing operation!") {
-        "simulate" => Operation::Simulate,
+        "simulate" => Operation::Print,
         "move" => Operation::Move,
         "copy" => Operation::Copy,
         o => panic!("Invalid operation: {}", o)
