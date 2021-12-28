@@ -4,7 +4,7 @@ use std::sync::mpsc;
 use std::thread;
 use std::time;
 
-use clap::{App, Arg};
+use clap::{App, AppSettings, Arg, Values};
 
 use crate::config::RootCfg;
 use crate::index::Scanner;
@@ -17,6 +17,7 @@ use crate::pattern::fallback::SimpleFileTypePattern;
 use crate::pattern::general::{DateTimePart, DateTimePattern, ScreenshotPattern};
 use crate::pipeline::{ControlMsg, PipelineController};
 use crate::sorting::{Sorter, SorterBuilder, Operation};
+use crate::sorting::comparison::{HASH_ALGO_NAMES, HashAlgorithm};
 
 mod index;
 mod sorting;
@@ -36,7 +37,8 @@ struct MArgs {
     dry_run: bool,
     config_path: Option<PathBuf>,
     operation: Operation,
-    thread_count: usize
+    thread_count: usize,
+    hash_operation: HashAlgorithm
 }
 
 fn main() {
@@ -59,7 +61,9 @@ fn main() {
             root_cfg.generate_sorter_builder(outdir).expect("Failed to read configuration!")
         }
         None => generate_default_sorter(outdir)
-    }.log(tx_log.clone());
+    }
+        .log(tx_log.clone())
+        .hash_algorithm(args.hash_operation);
 
     let meta_processor = MetaProcessor::new()
         .processor(Rexiv2Processor::new(), Priority::None)
@@ -126,6 +130,10 @@ fn process_files(args: MArgs, sorter: SorterBuilder, meta_processor: MetaProcess
 }
 
 fn parse_args() -> MArgs {
+    let about_hash_algo = format!(
+        "hash algorithm used for comparing files in case the same file exist already in the target directory. Possible values are: {:?}",
+        HashAlgorithm::names());
+
     let name_outdir = "output-dir";
     let name_threads = "max-threads";
     let name_infile = "FILE";
@@ -135,12 +143,15 @@ fn parse_args() -> MArgs {
     let name_cfg_path = "config";
     let name_simulate = "dry-run";
     let name_operation = "OPERATION";
+    let name_hash_algo = "hash-algorithm";
+    let name_hash_algo_none = "hash-algorithm-none";
 
 
     let matches = App::new("dcim-sort - sort images from DCIM folders")
         .version("0.1.0")
         .author("MCL")
         .about("Sort images from (unintuitive) DCIM file structures")
+        .setting(AppSettings::UnifiedHelpMessage)
         .arg(Arg::new(name_outdir)
             .required(false)
             .short('o')
@@ -189,6 +200,21 @@ fn parse_args() -> MArgs {
             .multiple(false)
             .about("input file to process. In case of a folder, all children are processed recursively.")
             .required(true))
+        .arg(Arg::new(name_hash_algo)
+            .about(about_hash_algo.as_str())
+            .multiple(false)
+            .short('h')
+            .long("hash-algorithm")
+            .takes_value(true)
+            .default_value(HashAlgorithm::names()[0])
+        )
+        .arg(Arg::new(name_hash_algo_none)
+            .about("disables file hashing for comparison (same as '-h none')")
+            .multiple(false)
+            .short('H')
+            .required(false)
+            .takes_value(false)
+        )
         .subcommand(App::new("simulate")
             .about("only simulate processing with generated targets printed to STDOUT"))
         .subcommand(App::new("move")
@@ -220,6 +246,12 @@ fn parse_args() -> MArgs {
         false => None
     };
 
+    let override_no_hash = matches.is_present(name_hash_algo_none);
+    let hash_algo = match override_no_hash {
+        true => HashAlgorithm::None,
+        false => HashAlgorithm::parse(matches.value_of(name_hash_algo).unwrap())
+    };
+
     let operation = match matches.subcommand_name().expect("Missing operation!") {
         "simulate" => Operation::Print,
         "move" => Operation::Move,
@@ -237,7 +269,8 @@ fn parse_args() -> MArgs {
         dry_run,
         config_path: cfg_path,
         operation,
-        thread_count: max_threads
+        thread_count: max_threads,
+        hash_operation: hash_algo
     }
 }
 

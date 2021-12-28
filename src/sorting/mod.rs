@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 use std::sync::mpsc;
 
 use crate::logging::LogMsg;
-use crate::LogReq;
+use crate::{HashAlgorithm, LogReq};
 use crate::media::{FileType, ImgInfo};
 use crate::pattern::PatternElement;
 use crate::pipeline::Report;
@@ -11,7 +11,7 @@ use crate::sorting::comparison::{Cause, ComparisonErr, FileComparer};
 use crate::sorting::fs_support::DirCreationRequest;
 
 pub mod fs_support;
-mod comparison;
+pub mod comparison;
 
 /// Sorting Operation to perform on files sorted.
 ///
@@ -64,7 +64,8 @@ pub struct SorterBuilder {
     dup_handling: DuplicateResolution,
     target_root: PathBuf,
     log: Option<mpsc::Sender<LogReq>>,
-    build_count: u32
+    build_count: u32,
+    hash_algo: HashAlgorithm
 }
 
 enum PreCheckResult {
@@ -72,6 +73,16 @@ enum PreCheckResult {
     Skip,
     RenameTarget,
     Error(String)
+}
+impl PreCheckResult {
+    pub fn to_str(&self) -> &'static str {
+        match self {
+            PreCheckResult::Execute => "Execute",
+            PreCheckResult::Skip => "Skip",
+            PreCheckResult::RenameTarget => "Rename",
+            PreCheckResult::Error(_) => "Error"
+        }
+    }
 }
 
 impl SorterBuilder {
@@ -93,6 +104,12 @@ impl SorterBuilder {
     /// add a channel connected to a logger
     pub fn log(mut self, log: mpsc::Sender<LogReq>) -> SorterBuilder {
         self.log = Some(log);
+        self
+    }
+
+    /// set the hash algorithm for comparing
+    pub fn hash_algorithm(mut self, algo: HashAlgorithm) -> SorterBuilder {
+        self.hash_algo = algo;
         self
     }
 
@@ -163,7 +180,7 @@ impl SorterBuilder {
             tx_dir_creation: dir_creation_tx,
             log: self.log.clone(),
             log_id: self.generate_log_id(),
-            comparer: FileComparer::default()
+            comparer: FileComparer::new(false, self.hash_algo)
         }
     }
 
@@ -197,7 +214,8 @@ impl Sorter {
             dup_handling: DuplicateResolution::Compare(Comparison::Rename),
             target_root: target_dir.clone(),
             log: None,
-            build_count: 0
+            build_count: 0,
+            hash_algo: HashAlgorithm::None
         }
     }
 
@@ -277,6 +295,9 @@ impl Sorter {
         }
     }
 
+    /// execute `operation` on the input file `img`, which may be either copying or moving to
+    /// `target`, which needs to consist of target folder and target filename. Will always overwrite
+    /// `target` if it exists.
     fn execute(&mut self, img: &ImgInfo, destination: PathBuf, target: PathBuf, operation: Operation) -> Result<(), String> {
         if !destination.exists() {
             if self.create_dir(&destination) == false {
@@ -323,7 +344,9 @@ impl Sorter {
         }
     }
 
-    fn evaluate_execution(&self, src: &Path, target: &Path) -> PreCheckResult {
+    /// perform a pre-check on the operation to determine if it should be executed according to the
+    /// policy of handling duplicates (if the target exists).
+    fn evaluate_execution(&mut self, src: &Path, target: &Path) -> PreCheckResult {
         if !src.is_file() {
             return PreCheckResult::Error(
                 format!("source file does not exist: {}",
@@ -333,6 +356,9 @@ impl Sorter {
         }
         if !target.exists() {
             return PreCheckResult::Execute;
+        }
+        else {
+            self.duplicate_counter += 1;
         }
 
         // both src and target exist, evaluate strategy
@@ -383,16 +409,25 @@ impl Sorter {
         }
     }
 
+    /// move a file from `source` to `dest`, overwriting existing files
     fn move_file(dest: PathBuf, source: &Path) -> std::io::Result<()> {
+        assert!(!dest.is_dir());
+        assert!(source.is_file());
+
         let result = std::fs::rename(source, dest);
         result
     }
 
+    /// copy `source` to `dest`, overwriting existing files
     fn copy_file(dest: &Path, source: &Path) -> std::io::Result<u64> {
+        assert!(!dest.is_dir());
+        assert!(source.is_file());
+
         let result = std::fs::copy(source, dest);
         result
     }
 
+    /// translate a file based on its pattern-relevant data into a path relative to `self.target_root`
     pub fn translate(&self, img: &ImgInfo) -> PathBuf {
         let dest = self.target_root.clone();
         match img.file_type() {
@@ -401,6 +436,8 @@ impl Sorter {
         }
     }
 
+    /// translate a file based on its pattern-relevant data into a path relative to `self.target_root`
+    /// using [PatternElements] for supported file types
     fn translate_supported(&self, img: &ImgInfo, mut dest: PathBuf) -> PathBuf {
         for pattern in &self.segments {
             if let Some(seg_str) = pattern.translate(img) {
@@ -410,6 +447,8 @@ impl Sorter {
         dest
     }
 
+    /// translate a file based on its pattern-relevant data into a path relative to `self.target_root`
+    /// using [PatternElements] for unsupported file types
     fn translate_unsupported(&self, img: &ImgInfo, mut dest: PathBuf) -> PathBuf {
         for pattern in &self.fallback_segments {
             if let Some(seg_str) = pattern.translate(img) {
@@ -419,6 +458,7 @@ impl Sorter {
         dest
     }
 
+    /// process a [ComparisonErr] into a readable error message
     fn create_cmp_err_msg(e: ComparisonErr, f1: &Path, f2: &Path) -> String {
         let mut cause: Option<&Path> = None;
         let mut msg: Option<String> = None;
@@ -463,6 +503,9 @@ impl Sorter {
         )
     }
 
+    /// mutate a filename to be unique in `target_folder` by adding incrementing numbers as an
+    /// additional suffix in the pattern `<original_filename>.<counter>` where `<counter>` will be
+    /// a decimal in range 0 to 999 represented with a fixed width of 3 chars (e.g. `012`).
     fn find_dup_free_name(target_folder: &Path, filename: &str) -> Option<PathBuf> {
         assert!(target_folder.is_dir());
 
@@ -481,14 +524,17 @@ impl Sorter {
         Some(target)
     }
 
+    /// get the number of segments in tuple of `(count_supported, count_unsupported)`
     pub fn get_seg_count(&self) -> (usize,usize) {
         (self.segments.len(), self.fallback_segments.len())
     }
 
+    /// get a slice of supported segments
     pub fn get_segments_supported(&self) -> &[Box<dyn PatternElement + Send>] {
         &self.segments[..]
     }
 
+    /// get a report of processed files
     pub fn get_report(&self) -> Report {
         Report {
             count_success: self.sorted_files,
