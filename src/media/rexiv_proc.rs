@@ -8,8 +8,9 @@ use crate::media::{FileMetaProcessor, FileType, ImgMeta, MetaType};
 const EXIF_DATETIME_RX: &str = "^\\d{4}:\\d{2}:\\d{2} \\d{2}:\\d{2}:\\d{2}$";
 const EXIF_DATETIME_FMT: &str = "%Y:%m:%d %T";
 
-const EXIF_T_DATETIME: (u64,&str) = (0x0132, "Exif.Image.DateTime");
-const EXIF_T_DATETIME_ORIGINAL: (u64,&str) = (0x9003, "Exif.Image.DateTimeOriginal");
+const EXIF_T_DATETIME_TIFF: (u64, &str) = (0x0132, "Exif.Image.DateTime");
+const EXIF_T_DATETIME_ORIGINAL_TIFF: (u64, &str) = (0x9003, "Exif.Image.DateTimeOriginal");
+const EXIF_T_DATETIME_ORIGINAL_EXIF: (u64, &str) = (0x9003, "Exif.Photo.DateTimeOriginal");
 const EXIF_T_MAKE: (u64,&str) = (0x010f, "Exif.Image.Make");
 const EXIF_T_MODEL: (u64,&str) = (0x0110, "Exif.Image.Model");
 const EXIF_T_USER_COMMENT: (u64,&str) = (0x9286, "Exif.Photo.UserComment");
@@ -83,10 +84,13 @@ impl Rexiv2Processor {
     }
 
     fn exif_read_datetime(rmeta: &Metadata) -> Option<DateTime<Local>> {
-        if let Ok(tag) = rmeta.get_tag_string(EXIF_T_DATETIME_ORIGINAL.1) {
+        if let Ok(tag) = rmeta.get_tag_string(EXIF_T_DATETIME_ORIGINAL_TIFF.1) {
             Self::exif_parse_datetime(&tag)
         }
-        else if let Ok(tag) = rmeta.get_tag_string(EXIF_T_DATETIME.1) {
+        else if let Ok(tag) = rmeta.get_tag_string(EXIF_T_DATETIME_ORIGINAL_EXIF.1) {
+            Self::exif_parse_datetime(&tag)
+        }
+        else if let Ok(tag) = rmeta.get_tag_string(EXIF_T_DATETIME_TIFF.1) {
             Self::exif_parse_datetime(&tag)
         }
         else {
