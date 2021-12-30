@@ -93,11 +93,9 @@ impl RootCfg {
                     Ok(e) => Ok(e),
                     Err(e) => Err(CfgError::XmlParseFailure(e))
                 }?;
-                if let Some(config_el) = root_el.get_child("config", "") {
-                    Self::from(config_el)
-                }
-                else {
-                    Err(CfgError::val_err("missing root element \"config\""))
+                match root_el.name() {
+                    "config" => Self::from(&root_el),
+                    x => Err(CfgError::val_err(format!("unexpected root element: \"{}\"", x).as_str()))
                 }
             }
         }

@@ -1,0 +1,83 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes" ?>
+<!--
+====IMPORTANT======================================================
+|the crate used for parsing XML (minidom) does not allow comments |
+|to be present (for whatever reason). This file can be used as a  |
+|template but before using it, all comments have to be removed.   |
+===================================================================
+-->
+<config xmlns="">
+  <sorter>
+    <!-- strategy can be one of "ignore", "overwrite", "compare"
+         "compare" requires an inner text node with one of "rename", "favor_target", "favor_source"
+         Example: <duplicateResolution strategy="compare">favor_source</duplicateResolution> -->
+    <duplicateResolution strategy="ignore"/>
+    <!-- segment for supported filetypes -->
+    <supported>
+      <!-- each segment has its own structure depending on its type -->
+      <!-- supported types include "MakeModelPattern", "ScreenshotPattern", "DateTimePattern" "SimpleFileTypePattern"-->
+      <segments>
+        <!-- MakeModelPattern to generate a path segment based on values of 'Make' and 'Model' -->
+        <segment type="MakeModelPattern" index="0">
+          <!-- parts of the Make and Model tags to use -->
+          <parts>
+            <part index="0">Make</part>
+            <part index="1">Model</part>
+          </parts>
+          <!-- space/blank characters should be replaced -->
+          <replaceSpaces>true</replaceSpaces>
+          <!-- default value if 'Make' is not set -->
+          <defaultMake>unknown</defaultMake>
+          <!-- default value if 'Model' is not set -->
+          <defaultModel>unknown</defaultModel>
+          <!-- separator between each part -->
+          <separator>_</separator>
+          <!-- case normalization, one of "Lowercase", "Uppercase", "None" -->
+          <caseNormalization>Lowercase</caseNormalization>
+          <!-- fallback string in case both model and make is not set -->
+          <fallback>unknown_device</fallback>
+        </segment>
+        <!-- segment identifying screenshots, is passive on non-screenshots -->
+        <segment type="ScreenshotPattern" index="1">
+          <!-- simple segment name -->
+          <value>screenshots</value>
+        </segment>
+        <!-- DateTimePattern segment that considers timestamps from DateTime tags -->
+        <segment type="DateTimePattern" index="2">
+          <!-- parts of the timestamp to be used. Possible values: "year", "month", "day", "hour", "minute", "second" -->
+          <parts>
+            <part index="0">Year</part>
+            <part index="1">Month</part>
+          </parts>
+          <!-- separator between each part -->
+          <separator>-</separator>
+          <!-- default value if no timestamps were found -->
+          <defaultValue>unknown</defaultValue>
+          <!-- sets if no timestamps were found in img metadata, the file system timestamp should be used instead -->
+          <fallbackFsTimestamp>false</fallbackFsTimestamp>
+        </segment>
+      </segments>
+    </supported>
+    <!-- segment for unsupported filetypes -->
+    <fallback>
+      <!-- the same types are available as for supported files, although only "SimpleFileTypePattern" makes sense  -->
+      <segments>
+        <!-- segment that is capable of filtering some common file types by extension into folders -->
+        <segment type="SimpleFileTypePattern" index="0">
+          <!-- name for video files -->
+          <defaultVideo>videos</defaultVideo>
+          <!-- name for picture files -->
+          <defaultPicture>pictures</defaultPicture>
+          <!-- name for audio files -->
+          <defaultAudio>audio_files</defaultAudio>
+          <!-- name for simple text files -->
+          <defaultText>text</defaultText>
+          <!-- name for document type files -->
+          <defaultDocument>documents</defaultDocument>
+          <!-- name for unrecognized files -->
+          <defaultOther>other</defaultOther>
+        </segment>
+      </segments>
+    </fallback>
+  </sorter>
+</config>
