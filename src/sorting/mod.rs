@@ -1,12 +1,9 @@
-use std::io::Error;
 use std::path::{Path, PathBuf};
 use std::sync::mpsc;
 
-use crate::logging::LogMsg;
 use crate::{HashAlgorithm, LogReq};
-use crate::media::{FileType, ImgInfo};
+use crate::media::ImgInfo;
 use crate::pattern::PatternElement;
-use crate::pipeline::Report;
 use crate::sorting::comparison::{Cause, ComparisonErr, FileComparer};
 use crate::sorting::fs_support::{DirCreationRequest, DirManager};
 use crate::sorting::translation::Translator;
@@ -14,7 +11,6 @@ use crate::sorting::translation::Translator;
 pub mod fs_support;
 pub mod comparison;
 mod translation;
-mod next;
 
 /// a fallback string in case an OsStr could not be transformed to a [std::String]
 pub static PATHSTR_FB: &str = "<INVALID_UTF-8>";
@@ -25,7 +21,6 @@ struct AsyncDirChannel {
     rx_callback: mpsc::Receiver<bool>,
     tx_callback: mpsc::Sender<bool>
 }
-
 impl AsyncDirChannel {
     pub fn new(chan_dirmgr: mpsc::Sender<DirCreationRequest>) -> AsyncDirChannel {
         let (tx_cb, rx_cb) = mpsc::channel::<bool>();
@@ -60,6 +55,13 @@ impl Operation {
     }
 }
 
+/// Existing target files should be compared and handled according to the variant of this enum if
+/// both files differ.
+///
+/// # Variants
+/// - [Comparison::Rename] rename the target file and keep both
+/// - [Comparison::FavorTarget] favour the target file by not overwriting it with the source file
+/// - [Comparison::FavorSource] always overwrite the target with the source file
 #[derive(Clone, Copy)]
 pub enum Comparison {
     Rename,
@@ -73,16 +75,14 @@ pub enum DuplicateResolution {
     Compare(Comparison),
 }
 
-pub struct SorterBuilder {
-    segments: Vec<Box<dyn PatternElement + Send>>,
-    fallback_segments: Vec<Box<dyn PatternElement + Send>>,
-    dup_handling: DuplicateResolution,
-    target_root: PathBuf,
-    log: Option<mpsc::Sender<LogReq>>,
-    build_count: u32,
-    hash_algo: HashAlgorithm
-}
-
+/// The result of a pre-check performed on a SortAction to detect possible existing target files
+/// and evaluation of a policy that tells what to do in that case.
+///
+/// # Variants
+/// - [PreCheckResult::Execute] The action should be executed as-is
+/// - [PreCheckResult::Skip] The action should skipped
+/// - [PreCheckResult::RenameTarget] The target filename should be renamed to avoid overwriting
+/// - [PreCheckResult::Error] An error happened while evaluating the policy
 pub enum PreCheckResult {
     Execute,
     Skip,
@@ -100,130 +100,8 @@ impl PreCheckResult {
     }
 }
 
-impl SorterBuilder {
-
-    // defaults ====>
-    pub fn default_duplicate_handling() -> DuplicateResolution {
-        DuplicateResolution::Ignore
-    }
-    // <====
-
-    /// Generates a unique ID for each sorter built for logging
-    fn generate_log_id(&mut self) -> String {
-        let id = format!("sorter@{:02}", self.build_count);
-        self.build_count += 1;
-        id
-    }
-
-    /// Add a segment pattern to the internal vec of segments for sorting
-    /// files with supported metadata.
-    pub fn segment(mut self, s: Box<dyn PatternElement + Send>) -> SorterBuilder {
-        self.push_segment_supported(s);
-        self
-    }
-
-    /// add a channel connected to a logger
-    pub fn log(mut self, log: mpsc::Sender<LogReq>) -> SorterBuilder {
-        self.log = Some(log);
-        self
-    }
-
-    /// set the hash algorithm for comparing
-    pub fn hash_algorithm(mut self, algo: HashAlgorithm) -> SorterBuilder {
-        self.hash_algo = algo;
-        self
-    }
-
-    /// Add a segment pattern to the internal vec of segments for sorting
-    /// files without supported metadata.
-    pub fn fallback(mut self, s: Box<dyn PatternElement + Send>) -> SorterBuilder {
-        self.push_segment_fallback(s);
-        self
-    }
-
-    /// set how files already existing in the target directory with the
-    /// same name should be handled.
-    pub fn duplicate_handling(mut self, a: DuplicateResolution) -> SorterBuilder {
-        self.dup_handling = a;
-        self
-    }
-
-    /// add a supported path segment to the end of the list
-    pub fn push_segment_supported(&mut self, s: Box<dyn PatternElement + Send>) {
-        self.segments.push(s);
-    }
-
-    /// add a fallback path segment to the end of the list
-    pub fn push_segment_fallback(&mut self, s: Box<dyn PatternElement + Send>) {
-        self.fallback_segments.push(s);
-    }
-
-    /// consume the current builder and produce a single instance of a sorter
-    pub fn build(mut self, dir_creation_tx: mpsc::Sender<DirCreationRequest>) -> Sorter {
-        self.build_clone(dir_creation_tx)
-    }
-
-    /// build a single sorter instance without consuming the builder
-    pub fn build_clone(&mut self, dir_creation_tx: mpsc::Sender<DirCreationRequest>) -> Sorter {
-        /*
-        let (tx, rx) = mpsc::channel::<bool>();
-        let segs = self.clone_segs();
-        Sorter {
-            segments: segs.0,
-            fallback_segments: segs.1,
-            dup_handling: self.dup_handling,
-            target_root: self.target_root.clone(),
-            duplicate_counter: 0,
-            skipped_files: 0,
-            sorted_files: 0,
-            created_dirs: 0,
-            dirs_to_create: Vec::new(),
-            rx_callback: rx,
-            tx_callback: tx,
-            tx_dir_creation: dir_creation_tx,
-            log: self.log.clone(),
-            log_id: self.generate_log_id(),
-            comparer: FileComparer::new(false, self.hash_algo)
-        }
-         */
-        self.build_async(dir_creation_tx)
-    }
-
-    fn clone_segs(&self) -> (Vec<Box<dyn PatternElement + Send>>, Vec<Box<dyn PatternElement + Send>>) {
-        let mut segs = Vec::<Box<dyn PatternElement + Send>>::with_capacity(self.segments.len());
-        let mut fb_segs = Vec::<Box<dyn PatternElement + Send>>::with_capacity(self.fallback_segments.len());
-
-        for s in &self.segments {
-            segs.push(s.clone_boxed());
-        }
-
-        for s in &self.fallback_segments {
-            fb_segs.push(s.clone_boxed());
-        }
-
-        (segs, fb_segs)
-    }
-
-    // ================================================================================
-    fn build_clone_translator(&mut self) -> Translator {
-        let segs = self.clone_segs();
-        Translator::new(segs.0, segs.1)
-    }
-
-    pub fn build_sync(&mut self) -> Sorter {
-        let translator = self.build_clone_translator();
-        let comparer = FileComparer::new(false, self.hash_algo);
-        Sorter::new(translator, comparer)
-    }
-
-    pub fn build_async(&mut self, chan_dir_mgr: mpsc::Sender<DirCreationRequest>) -> Sorter {
-        let translator = self.build_clone_translator();
-        let comparer = FileComparer::new(false, self.hash_algo);
-
-        Sorter::new_async(translator, comparer, chan_dir_mgr)
-    }
-}
-
+/// A struct containing the bundled information of source file, target location + filename and
+/// the operation to apply.
 pub struct SortAction {
     operation: Operation,
     source: PathBuf,
@@ -247,17 +125,6 @@ pub enum ActionResult {
     Skipped
 }
 
-enum SorterMode {
-    Sync,
-    Async(AsyncDirChannel)
-}
-
-pub struct Sorter {
-    translator: Translator,
-    comparer: FileComparer,
-    mode: SorterMode
-}
-
 /// error to indicate that mutating a filename for conflict resolution failed.
 ///
 /// # Variants
@@ -269,16 +136,47 @@ pub enum MutationErr {
     Failed
 }
 
+enum SorterMode {
+    Sync,
+    Async(AsyncDirChannel)
+}
+
+/// Utility to perform the actual sorting including duplicate checks and resolution. It is
+/// primarily designed for the following flow, processing an [ImgInfo] with existing metadata:
+/// 1. Create SortAction: translates the known metadata into target path segments and bundles
+///     them with the operation to apply
+/// 2. Evaluate execution: perform some pre-checks to avoid overwriting any files in the target
+///     directory. A policy defines how to handle existing targets (see [DuplicateResolution])
+/// 3. Execute the action
+///
+/// Note: step no. 2 and 3 can be combined with [Sorter::execute_checked]
+///
+/// # Examples
+///
+/// ```rust
+/// let target_root = PathBuf::from("sorted/");
+/// let input_file = ImgInfo::new(PathBuf::from("input/IMG0001.JPG")).unwrap();
+/// let sorter = Sorter::builder(target_root.as_path())
+///     .segment(SimpleFileTypePattern::new().build())
+///     .build_sync();
+///
+/// // create a new SortAction (here the ImgInfo has no metadata due to missing Pre-Processing)
+/// let action = sorter.calc_copy(&input_file, target_root.as_path());
+/// let result = sorter.execute_checked(action, &DuplicateResolution::Ignore);
+/// ```
+pub struct Sorter {
+    translator: Translator,
+    comparer: FileComparer,
+    mode: SorterMode
+}
 impl Sorter {
-    pub fn builder(target_dir: &Path) -> SorterBuilder {
+    pub fn builder() -> SorterBuilder {
         // TODO: cleanup
         SorterBuilder {
             segments: Vec::new(),
             fallback_segments: Vec::new(),
             dup_handling: DuplicateResolution::Compare(Comparison::Rename),
-            target_root: target_dir.to_path_buf(),
             log: None,
-            build_count: 0,
             hash_algo: HashAlgorithm::None
         }
     }
@@ -306,21 +204,21 @@ impl Sorter {
         self.translator.get_seg_count()
     }
 
-    // public functions to create initial actions ====>
+    /// create a new [SortAction] with operation=copy
     pub fn calc_copy(&self, file: &ImgInfo, target_root: &Path) -> SortAction {
         self.calc_action(file, target_root, Operation::Copy)
     }
 
+    /// create a new [SortAction] with operation=move
     pub fn calc_move(&self, file: &ImgInfo, target_root: &Path) -> SortAction {
         self.calc_action(file, target_root, Operation::Move)
     }
 
+    /// create a new [SortAction] with operation=simulate (print)
     pub fn calc_simulation(&self, file: &ImgInfo, target_root: &Path) -> SortAction {
         self.calc_action(file, target_root, Operation::Print)
     }
-    // <====
 
-    // helper functions to implement duplicate policy handling ====>
 
     /// perform a pre-check on the operation to determine if it should be executed according to the
     /// policy of handling duplicates (if the target exists).
@@ -399,9 +297,6 @@ impl Sorter {
 
         Ok(action)
     }
-    // <====
-
-    // execution functions ====>
 
     /// execute an action with the given operation, consuming the input action.
     ///
@@ -509,10 +404,6 @@ impl Sorter {
         }
     }
 
-    // <====
-
-    // private helper functions ====>
-
     fn calc_action(&self, file: &ImgInfo, target_root: &Path, op: Operation) -> SortAction {
         let target = self.translator.translate(file, target_root);
         SortAction{
@@ -566,6 +457,98 @@ impl Sorter {
                 msg.unwrap()
         )
     }
+}
 
-    // <====
+/// A builder to generate new Sorter instances
+pub struct SorterBuilder {
+    segments: Vec<Box<dyn PatternElement + Send>>,
+    fallback_segments: Vec<Box<dyn PatternElement + Send>>,
+    dup_handling: DuplicateResolution,
+    log: Option<mpsc::Sender<LogReq>>,
+    hash_algo: HashAlgorithm
+}
+impl SorterBuilder {
+
+    /// the default duplicate handling policy
+    pub fn default_duplicate_handling() -> DuplicateResolution {
+        DuplicateResolution::Ignore
+    }
+
+    /// Add a segment pattern to the internal vec of segments for sorting
+    /// files with supported metadata.
+    pub fn segment(mut self, s: Box<dyn PatternElement + Send>) -> SorterBuilder {
+        self.push_segment_supported(s);
+        self
+    }
+
+    /// add a channel connected to a logger
+    pub fn log(mut self, log: mpsc::Sender<LogReq>) -> SorterBuilder {
+        self.log = Some(log);
+        self
+    }
+
+    /// set the hash algorithm for comparing
+    pub fn hash_algorithm(mut self, algo: HashAlgorithm) -> SorterBuilder {
+        self.hash_algo = algo;
+        self
+    }
+
+    /// Add a segment pattern to the internal vec of segments for sorting
+    /// files without supported metadata.
+    pub fn fallback(mut self, s: Box<dyn PatternElement + Send>) -> SorterBuilder {
+        self.push_segment_fallback(s);
+        self
+    }
+
+    /// set how files already existing in the target directory with the
+    /// same name should be handled.
+    pub fn duplicate_handling(mut self, a: DuplicateResolution) -> SorterBuilder {
+        self.dup_handling = a;
+        self
+    }
+
+    /// add a supported path segment to the end of the list
+    pub fn push_segment_supported(&mut self, s: Box<dyn PatternElement + Send>) {
+        self.segments.push(s);
+    }
+
+    /// add a fallback path segment to the end of the list
+    pub fn push_segment_fallback(&mut self, s: Box<dyn PatternElement + Send>) {
+        self.fallback_segments.push(s);
+    }
+
+    fn clone_segs(&self) -> (Vec<Box<dyn PatternElement + Send>>, Vec<Box<dyn PatternElement + Send>>) {
+        let mut segs = Vec::<Box<dyn PatternElement + Send>>::with_capacity(self.segments.len());
+        let mut fb_segs = Vec::<Box<dyn PatternElement + Send>>::with_capacity(self.fallback_segments.len());
+
+        for s in &self.segments {
+            segs.push(s.clone_boxed());
+        }
+
+        for s in &self.fallback_segments {
+            fb_segs.push(s.clone_boxed());
+        }
+
+        (segs, fb_segs)
+    }
+
+    fn build_clone_translator(&mut self) -> Translator {
+        let segs = self.clone_segs();
+        Translator::new(segs.0, segs.1)
+    }
+
+    /// build a new synchronous builder
+    pub fn build_sync(&mut self) -> Sorter {
+        let translator = self.build_clone_translator();
+        let comparer = FileComparer::new(false, self.hash_algo);
+        Sorter::new(translator, comparer)
+    }
+
+    /// build a new asynchronous sorter
+    pub fn build_async(&mut self, chan_dir_mgr: mpsc::Sender<DirCreationRequest>) -> Sorter {
+        let translator = self.build_clone_translator();
+        let comparer = FileComparer::new(false, self.hash_algo);
+
+        Sorter::new_async(translator, comparer, chan_dir_mgr)
+    }
 }

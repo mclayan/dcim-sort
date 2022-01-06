@@ -181,8 +181,8 @@ impl SorterCfg {
         }
     }
 
-    pub fn generate_builder(&self, target_dir: &Path) -> Result<SorterBuilder, CfgError> {
-        let mut builder = Sorter::builder(target_dir)
+    pub fn generate_builder(&self) -> Result<SorterBuilder, CfgError> {
+        let mut builder = Sorter::builder()
             .duplicate_handling(self.dup_handling);
 
         for seg in &self.supported {

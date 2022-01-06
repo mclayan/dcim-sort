@@ -102,8 +102,8 @@ impl RootCfg {
         }
     }
 
-    pub fn generate_sorter_builder(&self, outdir: &Path) -> Result<SorterBuilder, CfgError> {
-        self.sorter.generate_builder(outdir)
+    pub fn generate_sorter_builder(&self) -> Result<SorterBuilder, CfgError> {
+        self.sorter.generate_builder()
     }
 
     pub fn get_sorter_cfg(&self) -> &SorterCfg {
