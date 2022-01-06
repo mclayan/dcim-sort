@@ -100,7 +100,7 @@ impl Pipeline {
         // process metadata
         self.processor.process(&mut req);
 
-        // sort file
+        // translate into action
         let action = match &self.sorting_operation {
             Operation::Copy => self.sorter.calc_copy(&req, self.target_root.as_path()),
             Operation::Move => self.sorter.calc_move(&req, self.target_root.as_path()),
@@ -109,6 +109,7 @@ impl Pipeline {
         if action.target_exists() {
             self.report.count_duplicate += 1;
         }
+        // execute action with policy check
         match self.sorter.execute_checked(action, &self.dup_handling)? {
             ActionResult::Moved | ActionResult::Copied => { self.report.count_success += 1; }
             ActionResult::Skipped                      => { self.report.count_skipped += 1; }
@@ -129,13 +130,15 @@ impl PipelineController {
         let mut threads = Vec::with_capacity(thread_count);
 
         let (tx_dm, rx_dm) = mpsc::channel::<DirCreationRequest>();
-        let dm_handle = thread::spawn(move || {
-            let mut dm = match &sorting_operation {
-                Operation::Print => DirManager::new_simulating(),
-                _               => DirManager::new()
-            };
-            dm.run(rx_dm);
-        });
+        let dm_handle = thread::Builder::new()
+            .name(String::from("dirmgr01"))
+            .spawn(move || {
+                let mut dm = match &sorting_operation {
+                    Operation::Print => DirManager::new_simulating(),
+                    _               => DirManager::new()
+                };
+                dm.run(rx_dm);
+            }).unwrap();
 
         for i in 0..thread_count {
             let (tx, rx) = mpsc::channel::<Request<ImgInfo>>();
