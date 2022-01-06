@@ -9,6 +9,7 @@ use clap::{App, AppSettings, Arg, Values};
 use crate::config::RootCfg;
 use crate::index::Scanner;
 use crate::logging::{Logger, LogReq};
+use crate::media::ImgInfo;
 use crate::media::kadamak_exif::KadamakExifProcessor;
 use crate::media::metadata_processor::{MetaProcessor, MetaProcessorBuilder, Priority};
 use crate::media::rexiv_proc::Rexiv2Processor;
@@ -16,7 +17,7 @@ use crate::pattern::device::{CaseNormalization, DevicePart, MakeModelPattern};
 use crate::pattern::fallback::SimpleFileTypePattern;
 use crate::pattern::general::{DateTimePart, DateTimePattern, ScreenshotPattern};
 use crate::pipeline::{ControlMsg, PipelineController};
-use crate::sorting::{Sorter, SorterBuilder, Operation};
+use crate::sorting::{DuplicateResolution, Operation, Sorter, SorterBuilder};
 use crate::sorting::comparison::{HASH_ALGO_NAMES, HashAlgorithm};
 
 mod index;
@@ -51,16 +52,21 @@ fn main() {
     // init logger
     let mut logger = Logger::new(&outdir, Option::None).unwrap();
     let (tx_log, rx_log) = mpsc::channel::<LogReq>();
-    let logger_handle = thread::spawn(move || {
-        logger.run(rx_log);
-    });
+    let logger_handle = thread::Builder::new()
+        .name(String::from("log01"))
+        .spawn(move || {
+            logger.run(rx_log);
+        }).unwrap();
+
+    let mut dup_handling = SorterBuilder::default_duplicate_handling();
 
     let mut sorter = match &args.config_path {
         Some(cfg) => {
             let root_cfg = read_config(cfg.as_path());
-            root_cfg.generate_sorter_builder(outdir).expect("Failed to read configuration!")
+            dup_handling = root_cfg.get_sorter_cfg().get_duplicate_handling().clone();
+            root_cfg.generate_sorter_builder().expect("Failed to read configuration!")
         }
-        None => generate_default_sorter(outdir)
+        None => generate_default_sorter()
     }
         .log(tx_log.clone())
         .hash_algorithm(args.hash_operation);
@@ -71,7 +77,7 @@ fn main() {
 
 
     if !args.dry_run {
-        process_files(args, sorter, meta_processor);
+        process_files(args, sorter, meta_processor, outdir.as_path(), dup_handling);
     }
 
     // shutdown logger
@@ -91,14 +97,10 @@ fn print_config(sorter: &Sorter, args: &MArgs) {
     print!("seg_count_supported: {}\nseg_count_fallback: {}\n", seg_count.0, seg_count.1);
     print!("segments:\n");
     let mut i: usize = 0;
-    for seg in sorter.get_segments_supported() {
-        println!("    [{:02}] {:>22}: {}", i, seg.name(), seg.display());
-        i += 1;
-    }
     println!();
 }
 
-fn process_files(args: MArgs, sorter: SorterBuilder, meta_processor: MetaProcessorBuilder) {
+fn process_files(args: MArgs, sorter: SorterBuilder, meta_processor: MetaProcessorBuilder, out_dir: &Path, dup_handling: DuplicateResolution) {
     println!("[INFO] Processing file: {}", &args.file);
     let mut scanner = Scanner::new(args.file.clone()).unwrap();
     scanner.debug(args.debug > 1);
@@ -108,7 +110,9 @@ fn process_files(args: MArgs, sorter: SorterBuilder, meta_processor: MetaProcess
         args.thread_count,
         meta_processor,
         sorter,
-        args.operation
+        args.operation,
+        out_dir,
+        dup_handling
     );
 
     if args.debug > 0 {
@@ -286,8 +290,8 @@ pub fn read_config(path: &Path) -> RootCfg {
     RootCfg::read_file(&mut file).unwrap()
 }
 
-pub fn generate_default_sorter(outdir: PathBuf) -> SorterBuilder {
-    Sorter::new(outdir)
+pub fn generate_default_sorter() -> SorterBuilder {
+    Sorter::builder()
         .segment(MakeModelPattern::new()
             .part(DevicePart::Make)
             .part(DevicePart::Model)

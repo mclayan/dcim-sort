@@ -1,4 +1,5 @@
 use std::fmt::{Display, Formatter};
+use std::path::{Path, PathBuf};
 use std::sync::mpsc;
 use std::sync::mpsc::Sender;
 use std::thread;
@@ -6,13 +7,16 @@ use std::thread::JoinHandle;
 
 use crate::media::ImgInfo;
 use crate::media::metadata_processor::{MetaProcessor, MetaProcessorBuilder};
-use crate::sorting::{fs_support::DirManager, Sorter, SorterBuilder, Operation};
-use crate::sorting::fs_support::DirCreationRequest;
+use crate::sorting::{Operation, SorterBuilder, Sorter, DuplicateResolution, ActionResult};
+use crate::sorting::fs_support::{DirCreationRequest, DirManager};
 
 pub struct Pipeline {
     processor: MetaProcessor,
     sorter: Sorter,
     sorting_operation: Operation,
+    target_root: PathBuf,
+    dup_handling: DuplicateResolution,
+    report: Report
 }
 
 pub enum ControlMsg {
@@ -26,6 +30,7 @@ pub enum Request<T> {
     Cmd(ControlMsg)
 }
 
+#[derive(Copy, Clone)]
 pub struct Report {
     pub count_success: u64,
     pub count_skipped: u64,
@@ -50,11 +55,14 @@ impl Display for Report {
 
 impl Pipeline {
 
-    pub fn new(processor: MetaProcessor, sorter: Sorter, sorting_operation: Operation) -> Pipeline {
+    pub fn new(processor: MetaProcessor, sorter: Sorter, sorting_operation: Operation, target_root: &Path, dup_handling: DuplicateResolution) -> Pipeline {
         Pipeline {
             processor,
             sorter,
-            sorting_operation
+            sorting_operation,
+            target_root: target_root.to_path_buf(),
+            dup_handling,
+            report: Report::new()
         }
     }
 
@@ -79,22 +87,33 @@ impl Pipeline {
 
         while let Ok(req) = rx.try_recv() {
             match req {
-                Request::Input(r) => self.process(r),
+                Request::Input(r) => self.process(r).unwrap(),
                 Request::Cmd(_) => continue
             };
         }
         if let Some(cb) = callback {
-            let report = self.sorter.get_report();
-            cb.send(ControlMsg::AckReport(report));
+            cb.send(ControlMsg::AckReport(self.report.clone()));
         }
     }
 
-    pub fn process(&mut self, mut req: ImgInfo) {
+    pub fn process(&mut self, mut req: ImgInfo) -> Result<(), String> {
         // process metadata
         self.processor.process(&mut req);
 
         // sort file
-        self.sorter.sort(&req, self.sorting_operation);
+        let action = match &self.sorting_operation {
+            Operation::Copy => self.sorter.calc_copy(&req, self.target_root.as_path()),
+            Operation::Move => self.sorter.calc_move(&req, self.target_root.as_path()),
+            Operation::Print => self.sorter.calc_simulation(&req, self.target_root.as_path())
+        };
+        if action.target_exists() {
+            self.report.count_duplicate += 1;
+        }
+        match self.sorter.execute_checked(action, &self.dup_handling)? {
+            ActionResult::Moved | ActionResult::Copied => { self.report.count_success += 1; }
+            ActionResult::Skipped                      => { self.report.count_skipped += 1; }
+        };
+        Ok(())
     }
 }
 
@@ -106,7 +125,7 @@ pub struct PipelineController {
 }
 
 impl PipelineController {
-    pub fn new(thread_count: usize, proc_cfg: MetaProcessorBuilder, mut sorter_cfg: SorterBuilder, sorting_operation: Operation) -> PipelineController {
+    pub fn new(thread_count: usize, proc_cfg: MetaProcessorBuilder, mut sorter_cfg: SorterBuilder, sorting_operation: Operation, target_root: &Path, dup_handling: DuplicateResolution) -> PipelineController {
         let mut threads = Vec::with_capacity(thread_count);
 
         let (tx_dm, rx_dm) = mpsc::channel::<DirCreationRequest>();
@@ -121,11 +140,13 @@ impl PipelineController {
         for i in 0..thread_count {
             let (tx, rx) = mpsc::channel::<Request<ImgInfo>>();
             let processor = proc_cfg.build_clone();
-            let sorter = sorter_cfg.build_clone(tx_dm.clone());
-            let mut pipeline = Pipeline::new(processor, sorter, sorting_operation.clone());
-            let t = thread::spawn(move || {
-                pipeline.run(rx);
-            });
+            let sorter = sorter_cfg.build_async(tx_dm.clone());
+            let mut pipeline = Pipeline::new(processor, sorter, sorting_operation.clone(), target_root, dup_handling);
+            let t = thread::Builder::new()
+                .name(format!("pipeline{:03}", i))
+                .spawn(move || {
+                    pipeline.run(rx);
+                }).unwrap();
             threads.push((tx, t));
         }
 
