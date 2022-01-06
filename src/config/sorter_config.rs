@@ -1,11 +1,11 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
 use minidom::Element;
 
 use crate::config::{CfgError, CfgValueError, SegmentConfig};
 use crate::config::seg_config::{DateTimePatternCfg, MakeModelPatternCfg, ScreenshotPatternCfg, SimpleFileTypePatternCfg};
-use crate::sorting::{Comparison, DuplicateResolution, Sorter, SorterBuilder};
+use crate::sorting::{Comparison, DuplicateResolution, SorterBuilder, Sorter};
 
 pub struct SorterCfg {
     supported: Vec<SegmentCfg>,
@@ -126,7 +126,7 @@ impl SorterCfg {
     pub fn from(el: &Element) -> Result<SorterCfg, CfgError> {
         let mut fallback: Vec<SegmentCfg> = Vec::new();
         let mut supported: Vec<SegmentCfg> = Vec::new();
-        let mut dup_handling = Sorter::def_duplicate_handling();
+        let mut dup_handling = SorterBuilder::default_duplicate_handling();
 
         for child in el.children() {
             match child.name() {
@@ -181,8 +181,8 @@ impl SorterCfg {
         }
     }
 
-    pub fn generate_builder(&self, target_dir: PathBuf) -> Result<SorterBuilder, CfgError> {
-        let mut builder = Sorter::new(target_dir)
+    pub fn generate_builder(&self) -> Result<SorterBuilder, CfgError> {
+        let mut builder = Sorter::builder()
             .duplicate_handling(self.dup_handling);
 
         for seg in &self.supported {
@@ -195,6 +195,9 @@ impl SorterCfg {
         Ok(builder)
     }
 
+    pub fn get_duplicate_handling(&self) -> DuplicateResolution {
+        self.dup_handling.clone()
+    }
     /*
     pub fn generate(&self, target_dir: PathBuf, mpsc::) -> Result<Sorter, CfgError> {
         let mut builder = self.generate_builder(target_dir);

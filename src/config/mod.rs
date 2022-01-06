@@ -2,12 +2,13 @@ use std::error::Error;
 use std::fmt::{Display, Formatter};
 use std::fs::File;
 use std::io::Read;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use minidom;
 use minidom::Element;
 
 use crate::config::sorter_config::SorterCfg;
+use crate::DuplicateResolution;
 use crate::pattern::PatternElement;
 use crate::sorting::SorterBuilder;
 
@@ -56,7 +57,7 @@ pub trait SegmentConfig {
 }
 
 pub struct RootCfg {
-    sorter: SorterCfg
+    sorter: SorterCfg,
 }
 
 impl RootCfg {
@@ -101,8 +102,12 @@ impl RootCfg {
         }
     }
 
-    pub fn generate_sorter_builder(&self, outdir: PathBuf) -> Result<SorterBuilder, CfgError> {
-        self.sorter.generate_builder(outdir)
+    pub fn generate_sorter_builder(&self) -> Result<SorterBuilder, CfgError> {
+        self.sorter.generate_builder()
+    }
+
+    pub fn get_sorter_cfg(&self) -> &SorterCfg {
+        &self.sorter
     }
 
     /*

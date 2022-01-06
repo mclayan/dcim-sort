@@ -1,7 +1,8 @@
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::mpsc;
+use std::sync::mpsc::Sender;
 
 enum Mode {
     Exec,
@@ -13,9 +14,9 @@ pub struct DirCreationRequest {
     callback: mpsc::Sender<bool>
 }
 impl DirCreationRequest {
-    pub fn new(path: &PathBuf, callback: mpsc::Sender<bool>) -> DirCreationRequest {
+    pub fn new(path: &Path, callback: mpsc::Sender<bool>) -> DirCreationRequest {
         DirCreationRequest {
-            target: path.clone(),
+            target: path.to_path_buf(),
             callback: callback
         }
     }
@@ -79,6 +80,13 @@ impl DirManager {
                     }
                 };
             }
+        }
+    }
+
+    pub fn create_path(path: &Path) -> Result<(), String> {
+        match std::fs::create_dir_all(path) {
+            Ok(_) => Ok(()),
+            Err(e) => Err(format!("failed to create path: {}", e))
         }
     }
 
