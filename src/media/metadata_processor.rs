@@ -34,7 +34,7 @@ impl MetaProcessorBuilder {
         self
     }
 
-    pub(crate) fn build_clone(&self) -> MetaProcessor {
+    pub fn build_clone(&self) -> MetaProcessor {
         let processors = self.clone_procs();
 
         MetaProcessor {

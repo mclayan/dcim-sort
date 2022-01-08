@@ -70,7 +70,11 @@ impl Pipeline {
         let mut callback: Option<Sender<ControlMsg>> = None;
         for request in &rx {
             match request {
-                Request::Input(req) => { self.process(req); }
+                Request::Input(req) => match self.process(req).unwrap() {
+                    ActionResult::Moved => {}
+                    ActionResult::Copied => {}
+                    ActionResult::Skipped => {}
+                },
                 Request::Cmd(cmd) => {
                     match cmd {
                         ControlMsg::Shutdown(cb) => {
@@ -96,7 +100,7 @@ impl Pipeline {
         }
     }
 
-    pub fn process(&mut self, mut req: ImgInfo) -> Result<(), String> {
+    pub fn process(&mut self, mut req: ImgInfo) -> Result<ActionResult, String> {
         // process metadata
         self.processor.process(&mut req);
 
@@ -110,11 +114,12 @@ impl Pipeline {
             self.report.count_duplicate += 1;
         }
         // execute action with policy check
-        match self.sorter.execute_checked(action, &self.dup_handling)? {
+        let result = self.sorter.execute_checked(action, &self.dup_handling)?;
+        match result {
             ActionResult::Moved | ActionResult::Copied => { self.report.count_success += 1; }
             ActionResult::Skipped                      => { self.report.count_skipped += 1; }
-        };
-        Ok(())
+        }
+        Ok(result)
     }
 }
 
@@ -133,10 +138,7 @@ impl PipelineController {
         let dm_handle = thread::Builder::new()
             .name(String::from("dirmgr01"))
             .spawn(move || {
-                let mut dm = match &sorting_operation {
-                    Operation::Print => DirManager::new_simulating(),
-                    _               => DirManager::new()
-                };
+                let mut dm = DirManager::new();
                 dm.run(rx_dm);
             }).unwrap();
 

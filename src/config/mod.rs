@@ -8,7 +8,7 @@ use minidom;
 use minidom::Element;
 
 use crate::config::sorter_config::SorterCfg;
-use crate::DuplicateResolution;
+use crate::sorting::DuplicateResolution;
 use crate::pattern::PatternElement;
 use crate::sorting::SorterBuilder;
 

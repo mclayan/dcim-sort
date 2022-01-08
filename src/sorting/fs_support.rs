@@ -3,21 +3,27 @@ use std::hash::{Hash, Hasher};
 use std::path::{Path, PathBuf};
 use std::sync::mpsc;
 use std::sync::mpsc::Sender;
-
-enum Mode {
-    Exec,
-    Collect
-}
+use crate::sorting::PATHSTR_FB;
 
 pub struct DirCreationRequest {
     target: PathBuf,
-    callback: mpsc::Sender<bool>
+    callback: mpsc::Sender<bool>,
+    cache_only: bool
 }
 impl DirCreationRequest {
     pub fn new(path: &Path, callback: mpsc::Sender<bool>) -> DirCreationRequest {
         DirCreationRequest {
             target: path.to_path_buf(),
-            callback: callback
+            callback: callback,
+            cache_only: false
+        }
+    }
+
+    pub fn new_simulating(path: &Path, callback: mpsc::Sender<bool>) -> DirCreationRequest {
+        DirCreationRequest {
+            target: path.to_path_buf(),
+            callback: callback,
+            cache_only: true
         }
     }
 }
@@ -29,7 +35,6 @@ struct CachedPath {
 
 
 pub struct DirManager {
-    mode: Mode,
     cache: Vec<u64>,
 }
 
@@ -37,14 +42,6 @@ impl DirManager {
 
     pub fn new() -> DirManager {
         DirManager {
-            mode: Mode::Exec,
-            cache: Vec::new(),
-        }
-    }
-
-    pub fn new_simulating() -> DirManager {
-        DirManager {
-            mode: Mode::Collect,
             cache: Vec::new(),
         }
     }
@@ -52,45 +49,44 @@ impl DirManager {
     pub fn run(&mut self, rx_input: mpsc::Receiver<DirCreationRequest>) {
         for request in rx_input {
             let tgt = request.target;
-            let hash = Self::hash_path(&tgt);
-            let mut is_cached = false;
-            for pp in &self.cache {
-                if *pp == hash {
-                    is_cached = true;
-                    request.callback.send(true).unwrap();
-                    break;
+            match self.create_path(tgt.as_path(), request.cache_only) {
+                Ok(_) => request.callback.send(true).unwrap(),
+                Err(e) => {
+                    eprintln!("[{}] failed to create path=\"{}\": {}",
+                        std::thread::current().name().unwrap_or("logmgr"),
+                        tgt.to_str().unwrap_or(PATHSTR_FB),
+                        e
+                    );
+                    request.callback.send(false).unwrap();
                 }
             }
-            if !is_cached {
-                match self.mode {
-                    Mode::Exec => {
-                        match std::fs::create_dir_all(tgt) {
-                            Err(e) => {
-                                println!("Failed to create destination directory: {}", e);
-                                request.callback.send(false).unwrap();
-                            },
-                            Ok(_) => {
-                                self.cache.push(hash);
-                                request.callback.send(true).unwrap();
-                            }
-                        };
-                    }
-                    Mode::Collect => {
-                        self.cache.push(hash);
-                    }
-                };
+        }
+    }
+
+    pub fn create_path(&mut self, path: &Path, cache_only: bool) -> Result<(), String> {
+        let hash = Self::hash_path(path);
+        let mut is_cached = false;
+        for pp in &self.cache {
+            if *pp == hash {
+                return Ok(());
+            }
+        }
+        match cache_only {
+            false => match std::fs::create_dir_all(path) {
+                Err(e) => Err(format!("Failed to create destination directory: {}", e)),
+                Ok(_) => {
+                    self.cache.push(hash);
+                    Ok(())
+                }
+            },
+            true => {
+                self.cache.push(hash);
+                Ok(())
             }
         }
     }
 
-    pub fn create_path(path: &Path) -> Result<(), String> {
-        match std::fs::create_dir_all(path) {
-            Ok(_) => Ok(()),
-            Err(e) => Err(format!("failed to create path: {}", e))
-        }
-    }
-
-    fn hash_path(path: &PathBuf) -> u64 {
+    fn hash_path(path: &Path) -> u64 {
         let mut hasher = DefaultHasher::new();
         path.hash(&mut hasher);
         hasher.finish()

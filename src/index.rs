@@ -1,5 +1,5 @@
 use std::io::{Error, ErrorKind};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use crate::media::{FileType, ImgInfo};
 use crate::pipeline::{PipelineController};
@@ -20,7 +20,7 @@ impl PathBox {
 }
 
 pub struct Scanner {
-    entry_point: String,
+    entry_point: PathBuf,
     max_depth: u8,
     depth: u8,
     debug: bool,
@@ -28,14 +28,13 @@ pub struct Scanner {
 }
 
 impl Scanner {
-    pub fn new(root_path: String) -> Result<Scanner, Error> {
-        let path = PathBuf::from(&root_path);
-        if !path.exists() {
+    pub fn new(root_path: &Path) -> Result<Scanner, Error> {
+        if !root_path.exists() {
             return Err(Error::new(ErrorKind::NotFound, "root must be a directory!"));
         }
         else {
             Ok(Scanner{
-                entry_point: root_path,
+                entry_point: root_path.to_path_buf(),
                 max_depth: 10,
                 depth: 0,
                 debug: false,
@@ -63,16 +62,16 @@ impl Scanner {
     pub fn scan(&mut self) -> Vec<ImgInfo> {
         let mut index : Vec<ImgInfo> =  Vec::new();
         self.depth = 0;
-        let root = PathBuf::from(&self.entry_point);
+        let root = self.entry_point.clone();
         self.scan_path(PathBox::from(root), &mut index);
         index
     }
 
     pub fn scan_pipeline(&mut self, controller: &mut PipelineController) {
         if self.debug {
-            println!("starting with root={}", self.entry_point);
+            println!("starting with root={}", self.entry_point.to_str().unwrap_or("<INVALID_UTF-8>"));
         }
-        let root = PathBuf::from(&self.entry_point);
+        let root =self.entry_point.clone();
         self.scan_path_ch(PathBox::from(root), controller);
     }
 
