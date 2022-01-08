@@ -14,6 +14,7 @@ use dcim_sort::pipeline::{Pipeline, PipelineController};
 use dcim_sort::sorting::comparison::HashAlgorithm;
 use dcim_sort::sorting::{ActionResult, DuplicateResolution, Operation, PATHSTR_FB, Sorter, SorterBuilder};
 
+/// helper struct to collect common options from command-line args
 struct MArgs {
     file: String,
     target_root: String,
@@ -27,6 +28,18 @@ struct MArgs {
     hash_operation: HashAlgorithm
 }
 
+/// helper struct to collect pipeline configurations.
+struct RuntimeCfg {
+    scanner: Scanner,
+    proc_builder: MetaProcessorBuilder,
+    sorter_builder: SorterBuilder,
+    output_dir: PathBuf,
+    operation: Operation,
+    dup_policy: DuplicateResolution,
+    thread_count: usize
+}
+
+/// parse command-line args
 fn parse_args() -> MArgs {
     let about_hash_algo = format!(
         "hash algorithm used for comparing files in case the same file exist already in the target directory. Possible values are: {:?}",
@@ -172,6 +185,7 @@ fn parse_args() -> MArgs {
     }
 }
 
+/// a default sorter configuration
  fn generate_default_sorter() -> SorterBuilder {
     Sorter::builder()
         .segment(MakeModelPattern::new()
@@ -190,6 +204,7 @@ fn parse_args() -> MArgs {
         .fallback(SimpleFileTypePattern::new().build())
 }
 
+/// main procedure for multi-threading scenarios
 fn process_threaded(mut cfg: RuntimeCfg, args: &MArgs) {
 
     let mut controller = PipelineController::new(
@@ -215,6 +230,7 @@ fn process_threaded(mut cfg: RuntimeCfg, args: &MArgs) {
     println!("{}", report);
 }
 
+/// main procedure for single-threaded scenarios
 fn process_sync(mut cfg: RuntimeCfg, args: &MArgs) {
     let mut pipeline = Pipeline::new(
         cfg.proc_builder.build_clone(),
@@ -247,6 +263,7 @@ fn process_sync(mut cfg: RuntimeCfg, args: &MArgs) {
 
 }
 
+/// helper to parse an XML-based config file including pre-checks
 fn parse_config_file(filepath: &Path) -> Result<RootCfg, String>{
     let path_str = filepath.to_str().unwrap_or(dcim_sort::sorting::PATHSTR_FB);
     if !filepath.is_file() {
@@ -264,16 +281,7 @@ fn parse_config_file(filepath: &Path) -> Result<RootCfg, String>{
     }
 }
 
-struct RuntimeCfg {
-    scanner: Scanner,
-    proc_builder: MetaProcessorBuilder,
-    sorter_builder: SorterBuilder,
-    output_dir: PathBuf,
-    operation: Operation,
-    dup_policy: DuplicateResolution,
-    thread_count: usize
-}
-
+/// helper for constructing pipeline configuration from args and wrap it up in a struct
 fn create_config(args: &MArgs) -> RuntimeCfg {
     let (dup_policy, sorter_builder) = match &args.config_path {
         None => (SorterBuilder::default_duplicate_handling(), generate_default_sorter()),
@@ -317,7 +325,6 @@ fn create_config(args: &MArgs) -> RuntimeCfg {
 
 fn main() {
     let args = parse_args();
-
     let cfg = create_config(&args);
 
     if args.thread_count <= 0 {
