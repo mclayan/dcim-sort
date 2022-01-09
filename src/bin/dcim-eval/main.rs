@@ -1,5 +1,3 @@
-mod seg_config;
-
 use std::fs::File;
 use std::path::{Path, PathBuf};
 
@@ -92,15 +90,8 @@ fn read_file(inp_file: &Path) -> Result<ImgInfo, String> {
     }
 }
 
-fn evaluate_path(file: &ImgInfo) -> Result<PathBuf, String> {
 
-    todo!()
-}
-
-fn print_metadata(file: &ImgInfo) {
-
-}
-
+/// build a default MetaProcessor with Rexiv2 as default and Kadamak as fallback
 fn build_meta_proc() -> MetaProcessor {
     MetaProcessor::new()
         .processor(Rexiv2Processor::new(), Priority::Highest)
@@ -108,6 +99,7 @@ fn build_meta_proc() -> MetaProcessor {
         .build_clone()
 }
 
+/// build a default sorter/translator configuration
 fn build_def_sorter() -> Sorter {
     Sorter::builder()
         .segment(MakeModelPattern::new()
@@ -146,6 +138,8 @@ fn parse_config_file(filepath: &Path) -> Result<RootCfg, String> {
 
 fn main() {
     let cfg = parse_args().unwrap();
+
+    // if a config file is present, read that to build the sorter/translator
     let sorter = match &cfg.cfg_file {
         None => build_def_sorter(),
         Some(file) => {
@@ -187,5 +181,6 @@ fn main() {
                 meta.user_comment()
             );
         }
+        println!();
     }
 }
