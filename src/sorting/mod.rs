@@ -10,7 +10,7 @@ use crate::sorting::translation::Translator;
 
 pub mod fs_support;
 pub mod comparison;
-mod translation;
+pub mod translation;
 
 /// a fallback string in case an OsStr could not be transformed to a [std::String]
 pub static PATHSTR_FB: &str = "<INVALID_UTF-8>";
@@ -110,6 +110,14 @@ pub struct SortAction {
 impl SortAction {
     pub fn target_exists(&self) -> bool {
         self.target.exists()
+    }
+
+    pub fn get_source(&self) -> &Path {
+        self.source.as_path()
+    }
+
+    pub fn get_target(&self) -> &Path {
+        self.target.as_path()
     }
 }
 
