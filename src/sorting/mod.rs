@@ -1,16 +1,16 @@
 use std::path::{Path, PathBuf};
 use std::sync::mpsc;
 
-use crate::{HashAlgorithm, LogReq};
 use crate::media::ImgInfo;
+use crate::logging::LogReq;
 use crate::pattern::PatternElement;
-use crate::sorting::comparison::{Cause, ComparisonErr, FileComparer};
+use crate::sorting::comparison::{HashAlgorithm, Cause, ComparisonErr, FileComparer};
 use crate::sorting::fs_support::{DirCreationRequest, DirManager};
 use crate::sorting::translation::Translator;
 
 pub mod fs_support;
 pub mod comparison;
-mod translation;
+pub mod translation;
 
 /// a fallback string in case an OsStr could not be transformed to a [std::String]
 pub static PATHSTR_FB: &str = "<INVALID_UTF-8>";
@@ -111,6 +111,14 @@ impl SortAction {
     pub fn target_exists(&self) -> bool {
         self.target.exists()
     }
+
+    pub fn get_source(&self) -> &Path {
+        self.source.as_path()
+    }
+
+    pub fn get_target(&self) -> &Path {
+        self.target.as_path()
+    }
 }
 
 /// An indicator of what has been performed when executing a [SortAction].
@@ -137,7 +145,7 @@ pub enum MutationErr {
 }
 
 enum SorterMode {
-    Sync,
+    Sync(DirManager),
     Async(AsyncDirChannel)
 }
 
@@ -185,7 +193,7 @@ impl Sorter {
         Sorter {
             translator: translator,
             comparer: comparer,
-            mode: SorterMode::Sync
+            mode: SorterMode::Sync(DirManager::new())
         }
     }
 
@@ -301,7 +309,7 @@ impl Sorter {
     /// execute an action with the given operation, consuming the input action.
     ///
     /// **WARNING:** does not perform any policy checks and will overwrite existing files.
-    pub fn execute(&self, action: SortAction) -> Result<ActionResult, String> {
+    pub fn execute(&mut self, action: SortAction) -> Result<ActionResult, String> {
         let (source, target) = (action.source.as_path(), action.target.as_path());
 
         // pre-checks to assure operation can be completed
@@ -318,9 +326,18 @@ impl Sorter {
             // parent dir, check if exists
             Some(parent) => {
                 if !parent.is_dir() {
-                    match &self.mode {
+                    if parent.is_file() {
+                        return Err(
+                            format!("failed to create parent directory \"{}\": a normal file with that name already exists!",
+                                parent.to_str().unwrap_or(PATHSTR_FB)
+                            )
+                        );
+                    }
+                    match &mut self.mode {
                         // synchronous mode, directly create path
-                        SorterMode::Sync => DirManager::create_path(parent)?,
+                        SorterMode::Sync(dm) => dm.create_path(parent,
+                                                               matches!(&action.operation, Operation::Print)
+                        )?,
                         // asynchronous mode, request creation via channel
                         SorterMode::Async(chan) => {
                             let req = DirCreationRequest::new(parent, chan.tx_callback.clone());
@@ -338,8 +355,8 @@ impl Sorter {
         }
 
         let result = match &action.operation {
-            Operation::Copy => std::fs::rename(source, target),
-            Operation::Move => match std::fs::copy(source, target) {
+            Operation::Move => std::fs::rename(source, target),
+            Operation::Copy => match std::fs::copy(source, target) {
                     Ok(bytes) => {
                         if bytes <= 0 {
                             println!("[WARN]: copied {} bytes for src=\"{}\"",
@@ -380,13 +397,16 @@ impl Sorter {
     ///
     /// # Errors
     /// This functions returns an [Err(String)] in case any errors were received while
-    /// executing the action with an error message taht can be printed.
-    pub fn execute_checked(&self, mut action: SortAction, policy: &DuplicateResolution) -> Result<ActionResult, String> {
+    /// executing the action with an error message that can be printed.
+    pub fn execute_checked(&mut self, mut action: SortAction, policy: &DuplicateResolution) -> Result<ActionResult, String> {
         let precheck_result = self.evaluate_execution(&action, policy);
 
         match precheck_result {
             PreCheckResult::Execute => self.execute(action),
-            PreCheckResult::Skip => Ok(ActionResult::Skipped),
+            PreCheckResult::Skip => match &action.operation {
+                Operation::Print => self.execute(action),
+                _                => Ok(ActionResult::Skipped)
+            },
             PreCheckResult::RenameTarget => {
                 action = match Self::mutate_target_filename(action) {
                     Ok(a) => a,
@@ -405,11 +425,13 @@ impl Sorter {
     }
 
     fn calc_action(&self, file: &ImgInfo, target_root: &Path, op: Operation) -> SortAction {
-        let target = self.translator.translate(file, target_root);
+        let mut target_folder = self.translator.translate(file, target_root);
+        let fname = file.path().file_name().expect("source filename is invalid!");
+        target_folder.push(fname);
         SortAction{
             operation: op,
             source: file.path().to_path_buf(),
-            target: target,
+            target: target_folder,
         }
     }
 

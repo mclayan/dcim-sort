@@ -76,7 +76,10 @@ impl ComparisonErr {
 ///
 /// # Examples:
 /// ```
-/// fn compare(source: &Path, target: &Path) -> Result<_, ComparisonErr> {
+/// use std::path::Path;
+/// use dcim_sort::sorting::comparison::ComparisonErr;
+///
+/// fn compare(source: &Path, target: &Path) -> Result<(), ComparisonErr> {
 ///     if !source.is_file() {
 ///         // indicate that argument `source` caused the Err
 ///         return Err(ComparisonErr::InvalidFile(Cause::Source));
@@ -91,7 +94,7 @@ impl ComparisonErr {
 ///             Some(String::from("hasher failed to initialize!")
 ///         )));
 ///     }
-///     Ok()
+///     Ok(())
 /// }
 /// ```
 pub enum Cause {

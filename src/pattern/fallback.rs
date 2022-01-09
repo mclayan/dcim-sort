@@ -159,3 +159,39 @@ impl SimpleFileTypePattern {
         }
     }
 }
+
+/// a simple dummy segment that will always translate to a fixed string, regardless of the
+/// input file.
+#[derive(Clone)]
+pub struct DummyPattern {
+    name: String
+}
+
+impl DummyPattern {
+    pub fn new(name: &str) -> Box<dyn PatternElement + Send> {
+        Box::new(DummyPattern{
+            name: name.to_string()
+        })
+    }
+}
+impl PatternElement for DummyPattern {
+    fn is_optional(&self) -> bool {
+        false
+    }
+
+    fn translate(&self, info: &ImgInfo) -> Option<String> {
+        Some(self.name.clone())
+    }
+
+    fn display(&self) -> String {
+        format!("name=\"{}\"", self.name.as_str())
+    }
+
+    fn name(&self) -> &str {
+        "DummyPattern"
+    }
+
+    fn clone_boxed(&self) -> Box<dyn PatternElement + Send> {
+        Box::new(self.clone())
+    }
+}
