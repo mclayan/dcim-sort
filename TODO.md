@@ -21,3 +21,7 @@ features.
 - **Config**
   - define pattern string (e.g. like regex) to avoid XML
   - get rid of XML config or migrate XML crate
+- **Metadata**
+  - replace ImgMeta with generic Key-Value pairs
+  - use more normalization
+  - move screenshot detection to translation phase

@@ -41,6 +41,9 @@
         <segment type="ScreenshotPattern" index="1">
           <!-- simple segment name -->
           <value>screenshots</value>
+          <!-- (optional) RegEx string to additionally match the filename against. Set attr "caseInsensitive" to "true"
+                          for case-insensitive matching (default: false) -->
+          <filenamePattern caseInsensitive="true">^screenshot.*$</filenamePattern>
         </segment>
         <!-- DateTimePattern segment that considers timestamps from DateTime tags -->
         <segment type="DateTimePattern" index="2">

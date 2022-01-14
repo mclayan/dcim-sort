@@ -14,6 +14,7 @@ const EXIF_T_DATETIME_ORIGINAL_EXIF: (u64, &str) = (0x9003, "Exif.Photo.DateTime
 const EXIF_T_MAKE: (u64,&str) = (0x010f, "Exif.Image.Make");
 const EXIF_T_MODEL: (u64,&str) = (0x0110, "Exif.Image.Model");
 const EXIF_T_USER_COMMENT: (u64,&str) = (0x9286, "Exif.Photo.UserComment");
+const EXIF_T_SOFTWARE: (u64, &str) = (0x0131, "Exif.Image.Software");
 
 const XMP_T_CREATE_DATE: &str = "Xmp.photoshop.DateCreated";
 const XMP_T_USER_COMMENT: &str = "Xmp.exif.UserComment";
@@ -72,7 +73,13 @@ impl Rexiv2Processor {
         let make = rmeta.get_tag_string(EXIF_T_MAKE.1).unwrap_or(String::new());
         let model = rmeta.get_tag_string(EXIF_T_MODEL.1).unwrap_or(String::new());
         let user_comment = rmeta.get_tag_string(EXIF_T_USER_COMMENT.1).unwrap_or(String::new());
-        let is_screenshot = user_comment == "Screenshot";
+        let software = rmeta.get_tag_string(EXIF_T_SOFTWARE.1).unwrap_or(String::new());
+        // it would be too easy to have a common tag used to mark screenshots:
+        // Apple -> user comment is just "Screenshot" in EXIF or 'lang="x-default" Screenshot' in XMP
+        // Android -> EXIF tag "Software" starts with "Android " followed by a version number which
+        //            is of course vendor-specific (e.g. Google just puts a build number, Samsung a
+        //            build number and something that looks like a unique ID, maybe for tracking)
+        let is_screenshot = user_comment == "Screenshot" || software.starts_with("Android ");
 
         ImgMeta {
             created_at,

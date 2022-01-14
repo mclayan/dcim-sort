@@ -64,7 +64,8 @@ impl KadamakExifProcessor {
                     Some(s) => s,
                     None => String::new()
                 };
-                let is_screenshot = user_comment == "Screenshot";
+                let software = Self::extract_as_string(&exif, exif::Tag::Software).unwrap_or(String::new());
+                let is_screenshot = user_comment == "Screenshot" || software.starts_with("Android ");
 
                 Some(ImgMeta {
                     created_at: timestamp,
