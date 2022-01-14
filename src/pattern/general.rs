@@ -1,10 +1,20 @@
+use std::fmt::format;
+
 use chrono::{Datelike, DateTime, Local, Timelike};
+use regex::{Regex, RegexBuilder};
 
 use crate::media::ImgInfo;
 use crate::pattern::PatternElement;
 
+static INVALID_REGEX_STR: &str = "the provided filename pattern is not a valid regex string";
+
+/// A pattern that will translate to a static segment name in case a file was identified as a
+/// screenshot. It evaluates the flag [crate::media::ImgMeta::is_screenshot] which was set by
+/// metadata processing and optionally matches the filename against a RegEx. If either methods
+/// indicate a screenshot, it translates to the static segment name or None if neither do.
 pub struct ScreenshotPattern {
     segment_name: String,
+    filename_pattern: Option<Regex>
 }
 
 impl ScreenshotPattern {
@@ -12,11 +22,37 @@ impl ScreenshotPattern {
         String::from("screenshots")
     }
 
+    /// Create a new pattern instance that identifies screenshots based on the flag
+    /// [crate::media::ImgMeta::is_screenshot]
     pub fn new(seg_name: String) -> Box<dyn PatternElement + Send> {
+        if seg_name.is_empty() {
+            eprintln!("WARNING: screenshot pattern translates to an empty string!");
+        }
 
         Box::new(ScreenshotPattern {
-            segment_name: seg_name
+            segment_name: seg_name,
+            filename_pattern: None
         })
+    }
+
+    /// Create a new pattern instance that tries to identify screenshots based on the filename
+    /// instead of just the flag [crate::media::ImgMeta::is_screenshot]
+    pub fn with_fname_matching(seg_name: String, filename_pattern: &str, case_insensitive: bool) -> Result<Box<dyn PatternElement + Send>, String> {
+        if filename_pattern.is_empty() {
+            return Err(INVALID_REGEX_STR.to_string());
+        }
+        let regex = match RegexBuilder::new(filename_pattern).case_insensitive(case_insensitive).build() {
+            Ok(r) => r,
+            Err(e) => {
+                return Err(INVALID_REGEX_STR.to_string());
+            }
+        };
+        Ok(
+            Box::new(ScreenshotPattern{
+                segment_name: seg_name,
+                filename_pattern: Some(regex)
+            })
+        )
     }
 }
 impl PatternElement for ScreenshotPattern {
@@ -26,8 +62,19 @@ impl PatternElement for ScreenshotPattern {
     }
 
     fn translate(&self, info: &ImgInfo) -> Option<String> {
+        let name_matches = match &self.filename_pattern {
+            None => false,
+            Some(regex) => match info.path().file_name() {
+                Some(name) => match name.to_str() {
+                    Some(n) => regex.is_match(n),
+                    None => false
+                },
+                None => false
+            }
+        };
+
         let m = info.metadata();
-        if m.is_screenshot() {
+        if m.is_screenshot() || name_matches {
             Some(self.segment_name.clone())
         }
         else {
@@ -45,7 +92,11 @@ impl PatternElement for ScreenshotPattern {
 
     fn clone_boxed(&self) -> Box<dyn PatternElement + Send> {
         Box::new(ScreenshotPattern{
-            segment_name: self.segment_name.clone()
+            segment_name: self.segment_name.clone(),
+            filename_pattern: match &self.filename_pattern {
+                None => None,
+                Some(r) => Some(r.clone())
+            }
         })
     }
 }

@@ -18,6 +18,7 @@
         </segment>
         <segment type="ScreenshotPattern" index="1">
           <value>screenshots</value>
+          <filenamePattern caseInsensitive="true">^screenshot.*$</filenamePattern>
         </segment>
         <segment type="DateTimePattern" index="2">
           <parts>

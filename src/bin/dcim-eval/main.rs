@@ -33,6 +33,7 @@ fn parse_args() -> Result<MainArgs, String> {
             .about("Config file to read (optional)")
             .short('f')
             .long("config")
+            .takes_value(true)
             .required(false))
         .arg(Arg::new("out_dir")
             .about("output directory - used as destination root, does not have to exist")
