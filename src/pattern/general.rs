@@ -1,5 +1,3 @@
-use std::fmt::format;
-
 use chrono::{Datelike, DateTime, Local, Timelike};
 use regex::{Regex, RegexBuilder};
 
@@ -43,7 +41,7 @@ impl ScreenshotPattern {
         }
         let regex = match RegexBuilder::new(filename_pattern).case_insensitive(case_insensitive).build() {
             Ok(r) => r,
-            Err(e) => {
+            Err(_e) => {
                 return Err(INVALID_REGEX_STR.to_string());
             }
         };
@@ -53,6 +51,19 @@ impl ScreenshotPattern {
                 filename_pattern: Some(regex)
             })
         )
+    }
+
+    /* === getters === */
+
+    pub fn segment_name(&self) -> &str {
+        self.segment_name.as_str()
+    }
+
+    pub fn filename_pattern(&self) -> Option<&Regex> {
+        match &self.filename_pattern {
+            Some(r) => Some(r),
+            None => None
+        }
     }
 }
 impl PatternElement for ScreenshotPattern {
@@ -169,6 +180,7 @@ impl DateTimePattern {
             pattern: Vec::new()
         }
     }
+
     fn generate_result(&self, ts: &DateTime<Local>) -> String {
         let mut result = String::new();
         let mut first = true;
@@ -190,7 +202,26 @@ impl DateTimePattern {
         }
         result
     }
+
+    /* === getters === */
+
+    pub fn fs_timestamp_fallback(&self) -> bool {
+        self.fs_timestamp_fallback
+    }
+
+    pub fn separator(&self) -> char {
+        self.separator
+    }
+
+    pub fn default(&self) -> &str {
+        self.default.as_str()
+    }
+
+    pub fn pattern(&self) -> &[DateTimePart] {
+        self.pattern.as_slice()
+    }
 }
+
 impl PatternElement for DateTimePattern {
     fn is_optional(&self) -> bool {
         false

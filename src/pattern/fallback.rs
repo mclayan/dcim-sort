@@ -158,6 +158,27 @@ impl SimpleFileTypePattern {
             other: Self::def_other()
         }
     }
+
+    /* === getters === */
+
+    pub fn video(&self) -> &str {
+        &self.video
+    }
+    pub fn picture(&self) -> &str {
+        &self.picture
+    }
+    pub fn audio(&self) -> &str {
+        &self.audio
+    }
+    pub fn text(&self) -> &str {
+        &self.text
+    }
+    pub fn document(&self) -> &str {
+        &self.document
+    }
+    pub fn other(&self) -> &str {
+        &self.other
+    }
 }
 
 /// a simple dummy segment that will always translate to a fixed string, regardless of the
@@ -173,7 +194,12 @@ impl DummyPattern {
             name: name.to_string()
         })
     }
+
+    pub fn name(&self) -> &str {
+        &self.name
+    }
 }
+
 impl PatternElement for DummyPattern {
     fn is_optional(&self) -> bool {
         false

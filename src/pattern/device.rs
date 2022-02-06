@@ -75,7 +75,38 @@ impl MakeModelPattern {
         };
         result
     }
+
+    /* ==== getters ==== */
+
+    pub fn pattern(&self) -> &[DevicePart] {
+        self.pattern.as_slice()
+    }
+
+    pub fn separator(&self) -> char {
+        self.separator
+    }
+
+    pub fn case_normalization(&self) -> &CaseNormalization {
+        &self.case
+    }
+
+    pub fn replace_spaces(&self) -> bool {
+        self.replace_spaces
+    }
+
+    pub fn fallback_value(&self) -> &str {
+        self.fallback.as_str()
+    }
+
+    pub fn default_make(&self) -> &str {
+        self.default_make.as_str()
+    }
+
+    pub fn default_model(&self) -> &str {
+        self.default_model.as_str()
+    }
 }
+
 impl PatternElement for MakeModelPattern {
     fn is_optional(&self) -> bool {
         false
@@ -222,11 +253,15 @@ impl MakeModelPatternBuilder {
     }
 
     pub fn build(mut self) -> Box<dyn PatternElement + Send> {
+        Box::new(self.build_unboxed())
+    }
+
+    pub fn build_unboxed(mut self) -> MakeModelPattern {
         if self.pattern.len() < 1 {
             self.pattern.push(DevicePart::Make);
             self.pattern.push(DevicePart::Model);
         }
-        Box::new(MakeModelPattern {
+        MakeModelPattern {
             pattern: self.pattern,
             separator: self.separator,
             case: self.case,
@@ -234,7 +269,7 @@ impl MakeModelPatternBuilder {
             fallback: self.fallback,
             default_make: self.default_make,
             default_model: self.default_model
-        })
+        }
     }
 }
 
