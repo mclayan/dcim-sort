@@ -23,14 +23,17 @@ impl ScreenshotPattern {
     /// Create a new pattern instance that identifies screenshots based on the flag
     /// [crate::media::ImgMeta::is_screenshot]
     pub fn new(seg_name: String) -> Box<dyn PatternElement + Send> {
+        Box::new(Self::new_unboxed(seg_name))
+    }
+
+    pub fn new_unboxed(seg_name: String) -> ScreenshotPattern {
         if seg_name.is_empty() {
             eprintln!("WARNING: screenshot pattern translates to an empty string!");
         }
-
-        Box::new(ScreenshotPattern {
+        ScreenshotPattern {
             segment_name: seg_name,
             filename_pattern: None
-        })
+        }
     }
 
     /// Create a new pattern instance that tries to identify screenshots based on the filename
@@ -313,14 +316,18 @@ impl DateTimePatternBuilder {
     }
 
     pub fn build(mut self) -> Box<dyn PatternElement + Send> {
+        Box::new(self.build_unboxed())
+    }
+
+    pub fn build_unboxed(mut self) -> DateTimePattern {
         if self.pattern.len() == 0 {
             self.pattern = vec![DateTimePart::Year, DateTimePart::Month]
         }
-        Box::new(DateTimePattern{
+        DateTimePattern{
             fs_timestamp_fallback: self.fs_timestamp_fallback,
             separator: self.separator,
             default: self.default,
             pattern: self.pattern
-        })
+        }
     }
 }

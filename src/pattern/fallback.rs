@@ -71,14 +71,18 @@ impl SimpleFileTypePatternBuilder {
     }
 
     pub fn build(mut self) -> Box<dyn PatternElement + Send> {
-        Box::new(SimpleFileTypePattern{
+        Box::new(self.build_unboxed())
+    }
+
+    pub fn build_unboxed(mut self) -> SimpleFileTypePattern {
+        SimpleFileTypePattern{
             video: self.video,
             picture: self.picture,
             audio: self.audio,
             text: self.text,
             document: self.document,
             other: self.other
-        })
+        }
     }
 }
 impl PatternElement for SimpleFileTypePattern {
@@ -190,9 +194,13 @@ pub struct DummyPattern {
 
 impl DummyPattern {
     pub fn new(name: &str) -> Box<dyn PatternElement + Send> {
-        Box::new(DummyPattern{
+        Box::new(Self::new_unboxed(name))
+    }
+
+    pub fn new_unboxed(name: &str) -> DummyPattern {
+        DummyPattern{
             name: name.to_string()
-        })
+        }
     }
 
     pub fn name(&self) -> &str {
