@@ -10,6 +10,7 @@ static INVALID_REGEX_STR: &str = "the provided filename pattern is not a valid r
 /// screenshot. It evaluates the flag [crate::media::ImgMeta::is_screenshot] which was set by
 /// metadata processing and optionally matches the filename against a RegEx. If either methods
 /// indicate a screenshot, it translates to the static segment name or None if neither do.
+#[derive(Clone)]
 pub struct ScreenshotPattern {
     segment_name: String,
     filename_pattern: Option<Regex>
@@ -149,6 +150,7 @@ impl DateTimePart {
 /// associated with the file. Can be configured via
 /// separators. Values are always expanded to fixed-
 /// width strings and padded with '0'.
+#[derive(Clone)]
 pub struct DateTimePattern {
     fs_timestamp_fallback: bool,
     separator: char,

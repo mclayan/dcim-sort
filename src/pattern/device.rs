@@ -24,6 +24,7 @@ pub enum CaseNormalization {
     None,
 }
 
+#[derive(Clone)]
 pub struct MakeModelPattern {
     pattern: Vec<DevicePart>,
     separator: char,
