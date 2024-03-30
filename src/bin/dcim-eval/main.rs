@@ -25,28 +25,28 @@ struct MainArgs {
 fn parse_args() -> Result<MainArgs, String> {
     let matches = App::new("dcim-eval")
         .arg(Arg::new("FILE")
-            .about("input file(s) to process")
+            .help("input file(s) to process")
             .multiple(true)
             .required(true)
             .index(1))
         .arg(Arg::new("config_file")
-            .about("Config file to read (optional)")
+            .help("Config file to read (optional)")
             .short('f')
             .long("config")
             .takes_value(true)
             .required(false))
         .arg(Arg::new("out_dir")
-            .about("output directory - used as destination root, does not have to exist")
+            .help("output directory - used as destination root, does not have to exist")
             .short('o')
             .long("output-dir")
             .default_value("sorted"))
         .arg(Arg::new("nprint_sorted")
-            .about("suppress printing target path after evaluating metadata")
+            .help("suppress printing target path after evaluating metadata")
             .short('T')
             .long("no-print-target")
             .required(false))
         .arg(Arg::new("print_meta")
-            .about("print relevant metadata read from input file(s)")
+            .help("print relevant metadata read from input file(s)")
             .short('m')
             .long("print-metadata")
             .required(false))
@@ -163,6 +163,7 @@ fn main() {
                          FileType::JPEG => "JPEG",
                          FileType::PNG => "PNG",
                          FileType::HEIC => "HEIC",
+                         FileType::DNG => "DNG",
                          FileType::Other => "other (unsupported metadata)"
                      },
                      action.get_target().to_str().unwrap_or(PATHSTR_FB)

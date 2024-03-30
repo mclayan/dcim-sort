@@ -13,6 +13,7 @@ pub enum FileType {
     JPEG,
     PNG,
     HEIC,
+    DNG,
     Other
 }
 pub enum MetaType {
@@ -62,6 +63,7 @@ impl FileType {
             "jpg" => FileType::JPEG,
             "png" => FileType::PNG,
             "heic" => FileType::HEIC,
+            "dng" => FileType::DNG,
             _ => FileType::Other
         }
     }
@@ -73,6 +75,7 @@ impl MetaType {
             FileType::HEIC => vec![MetaType::Exif, MetaType::XMP],
             FileType::JPEG => vec![MetaType::Exif, MetaType::XMP],
             FileType::PNG => vec![MetaType::Exif, MetaType::XMP],
+            FileType::DNG => vec![MetaType::Exif, MetaType::XMP],
             _ => vec![MetaType::None]
         }
     }
