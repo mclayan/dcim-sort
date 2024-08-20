@@ -164,6 +164,7 @@ fn main() {
                          FileType::PNG => "PNG",
                          FileType::HEIC => "HEIC",
                          FileType::DNG => "DNG",
+                         FileType::ARW => "ARW",
                          FileType::Other => "other (unsupported metadata)"
                      },
                      action.get_target().to_str().unwrap_or(PATHSTR_FB)

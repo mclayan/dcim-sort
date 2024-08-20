@@ -304,6 +304,7 @@ fn create_config(args: &MArgs) -> RuntimeCfg {
         panic!("Input file does not exist: \"{}\"", &args.file);
     }
     let mut scanner = Scanner::new(input_file.as_path()).unwrap();
+    scanner.debug(args.debug > 0);
     scanner.set_max_depth(args.max_recursion);
     scanner.ignore_unknown_types(args.ignore_unknown_types);
 

@@ -26,7 +26,7 @@ impl FileMetaProcessor for Rexiv2Processor {
     fn supports(&self, mt: &MetaType, ft: &FileType) -> bool {
         // HEIF formats are not supported yet
         match ft {
-            FileType::JPEG | FileType::PNG | FileType::DNG => {
+            FileType::JPEG | FileType::PNG | FileType::DNG | FileType::ARW => {
                 match mt {
                     MetaType::Exif | MetaType::XMP => true,
                     _ => false
