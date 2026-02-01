@@ -29,6 +29,10 @@
           <defaultValue>unknown</defaultValue>
           <fallbackFsTimestamp>false</fallbackFsTimestamp>
         </segment>
+        <segment type="FilenamePattern" index="3">
+          <value>raw</value>
+          <pattern type="postfix">.arw</pattern>
+        </segment>
       </segments>
     </supported>
     <fallback>

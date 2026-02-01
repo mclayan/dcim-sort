@@ -1,5 +1,6 @@
-use chrono::{Datelike, DateTime, Local, Timelike};
+use chrono::{DateTime, Datelike, Local, Timelike};
 use regex::{Regex, RegexBuilder};
+use std::borrow::Cow;
 
 use crate::media::ImgInfo;
 use crate::pattern::PatternElement;
@@ -13,7 +14,7 @@ static INVALID_REGEX_STR: &str = "the provided filename pattern is not a valid r
 #[derive(Clone)]
 pub struct ScreenshotPattern {
     segment_name: String,
-    filename_pattern: Option<Regex>
+    filename_pattern: Option<Regex>,
 }
 
 impl ScreenshotPattern {
@@ -33,28 +34,33 @@ impl ScreenshotPattern {
         }
         ScreenshotPattern {
             segment_name: seg_name,
-            filename_pattern: None
+            filename_pattern: None,
         }
     }
 
     /// Create a new pattern instance that tries to identify screenshots based on the filename
     /// instead of just the flag [crate::media::ImgMeta::is_screenshot]
-    pub fn with_fname_matching(seg_name: String, filename_pattern: &str, case_insensitive: bool) -> Result<Box<dyn PatternElement + Send>, String> {
+    pub fn with_fname_matching(
+        seg_name: String,
+        filename_pattern: &str,
+        case_insensitive: bool,
+    ) -> Result<Box<dyn PatternElement + Send>, String> {
         if filename_pattern.is_empty() {
             return Err(INVALID_REGEX_STR.to_string());
         }
-        let regex = match RegexBuilder::new(filename_pattern).case_insensitive(case_insensitive).build() {
+        let regex = match RegexBuilder::new(filename_pattern)
+            .case_insensitive(case_insensitive)
+            .build()
+        {
             Ok(r) => r,
             Err(_e) => {
                 return Err(INVALID_REGEX_STR.to_string());
             }
         };
-        Ok(
-            Box::new(ScreenshotPattern{
-                segment_name: seg_name,
-                filename_pattern: Some(regex)
-            })
-        )
+        Ok(Box::new(ScreenshotPattern {
+            segment_name: seg_name,
+            filename_pattern: Some(regex),
+        }))
     }
 
     /* === getters === */
@@ -66,12 +72,11 @@ impl ScreenshotPattern {
     pub fn filename_pattern(&self) -> Option<&Regex> {
         match &self.filename_pattern {
             Some(r) => Some(r),
-            None => None
+            None => None,
         }
     }
 }
 impl PatternElement for ScreenshotPattern {
-
     fn is_optional(&self) -> bool {
         true
     }
@@ -82,17 +87,16 @@ impl PatternElement for ScreenshotPattern {
             Some(regex) => match info.path().file_name() {
                 Some(name) => match name.to_str() {
                     Some(n) => regex.is_match(n),
-                    None => false
+                    None => false,
                 },
-                None => false
-            }
+                None => false,
+            },
         };
 
         let m = info.metadata();
         if m.is_screenshot() || name_matches {
             Some(self.segment_name.clone())
-        }
-        else {
+        } else {
             None
         }
     }
@@ -106,12 +110,12 @@ impl PatternElement for ScreenshotPattern {
     }
 
     fn clone_boxed(&self) -> Box<dyn PatternElement + Send> {
-        Box::new(ScreenshotPattern{
+        Box::new(ScreenshotPattern {
             segment_name: self.segment_name.clone(),
             filename_pattern: match &self.filename_pattern {
                 None => None,
-                Some(r) => Some(r.clone())
-            }
+                Some(r) => Some(r.clone()),
+            },
         })
     }
 }
@@ -129,19 +133,19 @@ pub enum DateTimePart {
     /// Minute, formatted as 'mm'
     Minute,
     /// Second, formatted as 'ss'
-    Second
+    Second,
 }
 
 impl DateTimePart {
     pub fn parse(s: &str) -> Option<DateTimePart> {
         match s.to_lowercase().as_str() {
-            "year"   => Some(DateTimePart::Year),
-            "month"  => Some(DateTimePart::Month),
-            "day"    => Some(DateTimePart::Day),
-            "hour"   => Some(DateTimePart::Hour),
+            "year" => Some(DateTimePart::Year),
+            "month" => Some(DateTimePart::Month),
+            "day" => Some(DateTimePart::Day),
+            "hour" => Some(DateTimePart::Hour),
             "minute" => Some(DateTimePart::Minute),
             "second" => Some(DateTimePart::Second),
-            _        => None
+            _ => None,
         }
     }
 }
@@ -155,13 +159,13 @@ pub struct DateTimePattern {
     fs_timestamp_fallback: bool,
     separator: char,
     default: String,
-    pattern: Vec<DateTimePart>
+    pattern: Vec<DateTimePart>,
 }
 pub struct DateTimePatternBuilder {
     fs_timestamp_fallback: bool,
     separator: char,
     default: String,
-    pattern: Vec<DateTimePart>
+    pattern: Vec<DateTimePart>,
 }
 
 impl DateTimePattern {
@@ -182,7 +186,7 @@ impl DateTimePattern {
             fs_timestamp_fallback: Self::def_fs_timestamp_fallback(),
             separator: Self::def_separator(),
             default: Self::def_default(),
-            pattern: Vec::new()
+            pattern: Vec::new(),
         }
     }
 
@@ -192,8 +196,7 @@ impl DateTimePattern {
         for part in &self.pattern {
             if first {
                 first = false;
-            }
-            else {
+            } else {
                 result.push(self.separator);
             }
             match part {
@@ -233,20 +236,19 @@ impl PatternElement for DateTimePattern {
     }
 
     fn translate(&self, info: &ImgInfo) -> Option<String> {
-        let timestamp : Option<&DateTime<Local>> = match info.metadata().created_at() {
+        let timestamp: Option<&DateTime<Local>> = match info.metadata().created_at() {
             Some(ts) => Some(ts),
             None => {
                 if self.fs_timestamp_fallback {
                     Some(info.changed_at())
-                }
-                else {
+                } else {
                     None
                 }
             }
         };
         let result = match timestamp {
             Some(ts) => self.generate_result(ts),
-            None => self.default.clone()
+            None => self.default.clone(),
         };
         Some(result)
     }
@@ -262,20 +264,18 @@ impl PatternElement for DateTimePattern {
                 DateTimePart::Day => 'd',
                 DateTimePart::Hour => 'h',
                 DateTimePart::Minute => 'm',
-                DateTimePart::Second => 's'
+                DateTimePart::Second => 's',
             };
             if first {
                 first = false;
-            }
-            else {
+            } else {
                 s.push(self.separator);
             }
             s.push(ps);
         }
-        format!("pattern=\"{}\" default=\"{}\" fs_ts_fallback=\"{}\"",
-            s,
-            &self.default,
-            self.fs_timestamp_fallback
+        format!(
+            "pattern=\"{}\" default=\"{}\" fs_ts_fallback=\"{}\"",
+            s, &self.default, self.fs_timestamp_fallback
         )
     }
 
@@ -284,11 +284,11 @@ impl PatternElement for DateTimePattern {
     }
 
     fn clone_boxed(&self) -> Box<dyn PatternElement + Send> {
-        Box::new(DateTimePattern{
+        Box::new(DateTimePattern {
             fs_timestamp_fallback: self.fs_timestamp_fallback,
             separator: self.separator,
             default: self.default.clone(),
-            pattern: self.pattern.clone()
+            pattern: self.pattern.clone(),
         })
     }
 }
@@ -325,11 +325,115 @@ impl DateTimePatternBuilder {
         if self.pattern.len() == 0 {
             self.pattern = vec![DateTimePart::Year, DateTimePart::Month]
         }
-        DateTimePattern{
+        DateTimePattern {
             fs_timestamp_fallback: self.fs_timestamp_fallback,
             separator: self.separator,
             default: self.default,
-            pattern: self.pattern
+            pattern: self.pattern,
         }
+    }
+}
+
+#[derive(Clone)]
+pub enum PatternType {
+    Prefix(String),
+    Postfix(String),
+    Exact(String),
+    Regex(regex::Regex),
+}
+impl PatternType {
+    pub fn is_rx(&self) -> bool {
+        match self {
+            PatternType::Regex(_) => true,
+            _ => false,
+        }
+    }
+}
+
+/// a simple segment that will match against the filename
+#[derive(Clone)]
+pub struct FilenamePattern {
+    seg_name: String,
+    pattern: PatternType,
+    case_sensitive: bool,
+}
+
+impl FilenamePattern {
+    pub fn with(seg_name: String, pattern: PatternType, case_sensitive: bool) -> Self {
+        Self {
+            seg_name: if case_sensitive || pattern.is_rx() {
+                seg_name
+            } else {
+                seg_name.to_ascii_lowercase()
+            },
+            pattern,
+            case_sensitive,
+        }
+    }
+
+    pub fn new(
+        name: &str,
+        pat: &str,
+        pat_type: &str,
+        case_sensitive: bool,
+    ) -> Result<Box<dyn PatternElement + Send>, regex::Error> {
+        Self::new_unboxed(name, pat, pat_type, case_sensitive)
+            .map::<Box<dyn PatternElement + Send>, _>(|i| Box::new(i))
+    }
+
+    pub fn new_unboxed(
+        name: &str,
+        pat: &str,
+        pat_type: &str,
+        case_sensitive: bool,
+    ) -> Result<FilenamePattern, regex::Error> {
+        let pattern = match pat_type.to_ascii_lowercase().as_str() {
+            "r" | "rx" | "regex" => PatternType::Regex(regex::Regex::new(pat)?),
+            "prefix" => PatternType::Prefix(pat.to_string()),
+            "postfix" => PatternType::Postfix(pat.to_string()),
+            _ => PatternType::Exact(pat.to_string()),
+        };
+        Ok(FilenamePattern {
+            seg_name: name.to_string(),
+            pattern,
+            case_sensitive,
+        })
+    }
+
+    pub fn name(&self) -> &str {
+        &self.seg_name
+    }
+}
+
+impl PatternElement for FilenamePattern {
+    fn is_optional(&self) -> bool {
+        false
+    }
+
+    fn translate(&self, info: &ImgInfo) -> Option<String> {
+        let filename = info.path().file_name()?.to_string_lossy();
+        let filename = match self.case_sensitive {
+            true => filename,
+            false => Cow::Owned(filename.to_ascii_lowercase()),
+        };
+        match &self.pattern {
+            PatternType::Prefix(pfx) => filename.starts_with(pfx),
+            PatternType::Postfix(pfx) => filename.ends_with(pfx),
+            PatternType::Exact(name) => filename.as_ref() == name,
+            PatternType::Regex(pat) => pat.is_match(filename.as_ref()),
+        }
+        .then_some(self.seg_name.clone())
+    }
+
+    fn display(&self) -> String {
+        format!("name=\"{}\"", self.seg_name.as_str())
+    }
+
+    fn name(&self) -> &str {
+        "FilenamePattern"
+    }
+
+    fn clone_boxed(&self) -> Box<dyn PatternElement + Send> {
+        Box::new(self.clone())
     }
 }

@@ -4,7 +4,7 @@ use std::str::FromStr;
 use minidom::Element;
 
 use crate::config::{CfgError, CfgValueError, SegmentConfig};
-use crate::config::seg_config::{DateTimePatternCfg, MakeModelPatternCfg, ScreenshotPatternCfg, SimpleFileTypePatternCfg};
+use crate::config::seg_config::{DateTimePatternCfg, FilenamePatternCfg, MakeModelPatternCfg, ScreenshotPatternCfg, SimpleFileTypePatternCfg};
 use crate::sorting::{Comparison, DuplicateResolution, SorterBuilder, Sorter};
 
 pub struct SorterCfg {
@@ -24,7 +24,8 @@ pub enum SegmentType {
     MakeModelPattern(MakeModelPatternCfg),
     ScreenshotPattern(ScreenshotPatternCfg),
     DateTimePattern(DateTimePatternCfg),
-    SimpleFileTypePattern(SimpleFileTypePatternCfg)
+    SimpleFileTypePattern(SimpleFileTypePatternCfg),
+    FilenamePattern(FilenamePatternCfg)
 }
 
 impl SegmentCfg {
@@ -47,6 +48,9 @@ impl SegmentCfg {
                     },
                     "SimpleFileTypePattern" => {
                         SimpleFileTypePatternCfg::from(el)
+                    },
+                    "FilenamePattern" => {
+                        FilenamePatternCfg::from(el)
                     }
                     _ => {
                         println!("[WARN] found unsupported segment type: {}", tp);

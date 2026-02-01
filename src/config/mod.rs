@@ -50,6 +50,10 @@ impl CfgValueError {
             msg: String::from(msg)
         }
     }
+    
+    pub fn from_string(s: String) -> Self {
+        Self {msg: s}
+    }
 }
 
 pub trait SegmentConfig {

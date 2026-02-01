@@ -59,6 +59,14 @@
           <!-- sets if no timestamps were found in img metadata, the file system timestamp should be used instead -->
           <fallbackFsTimestamp>false</fallbackFsTimestamp>
         </segment>
+        <!-- segment matching the filename -->
+        <segment type="FilenamePattern" index="3">
+          <!-- constant value this translates to if filename matches -->
+          <value>raw</value>
+          <!-- possible type values are: prefix, postfix, exact, rx (=regex)
+               (optional) case-sensitive may be set to true to match the case for non-regex patterns -->
+          <pattern type="postfix" case-sensitive="false">.arw</pattern>
+        </segment>
       </segments>
     </supported>
     <!-- segment for unsupported filetypes -->

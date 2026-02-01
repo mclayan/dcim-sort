@@ -3,9 +3,12 @@ use std::str::FromStr;
 use minidom::Element;
 
 use crate::config::{CfgError, CfgValueError, SegmentConfig};
+use crate::pattern;
 use crate::pattern::device::{CaseNormalization, DevicePart, MakeModelPattern};
 use crate::pattern::fallback::SimpleFileTypePattern;
-use crate::pattern::general::{DateTimePart, DateTimePattern, ScreenshotPattern};
+use crate::pattern::general::{
+    DateTimePart, DateTimePattern, FilenamePattern, PatternType, ScreenshotPattern,
+};
 use crate::pattern::PatternElement;
 
 pub struct SegPart {
@@ -50,19 +53,17 @@ fn parse_single_char(el: &Element) -> Result<Option<char>, CfgError> {
         match s.len() {
             1 => {
                 if s.bytes().len() != 1 {
-                    Err(CfgError::val_err("separator is not a single-byte character!"))
+                    Err(CfgError::val_err(
+                        "separator is not a single-byte character!",
+                    ))
                 } else {
                     let b = s.bytes().next().unwrap();
                     Ok(Some(char::from(b)))
                 }
             }
-            _ => {
-                Err(
-                    CfgError::IllegalValue(CfgValueError::new(
-                        "value \"separator\" must be exactly one character"
-                    ))
-                )
-            }
+            _ => Err(CfgError::IllegalValue(CfgValueError::new(
+                "value \"separator\" must be exactly one character",
+            ))),
         }
     } else {
         Ok(None)
@@ -77,8 +78,12 @@ fn parse_boolean(el: &Element) -> Result<Option<bool>, CfgError> {
         match bool::from_str(text.as_str()) {
             Ok(r) => Ok(Some(r)),
             Err(_) => Err(CfgError::val_err(
-                format!("value for element \"{}\" could not parsed as boolean", el.name()).as_str()
-            ))
+                format!(
+                    "value for element \"{}\" could not parsed as boolean",
+                    el.name()
+                )
+                .as_str(),
+            )),
         }
     }
 }
@@ -95,21 +100,22 @@ fn parse_string(el: &Element) -> Option<String> {
 impl SegPart {
     pub fn from(el: &Element) -> Result<SegPart, CfgError> {
         let ind_str = match el.attr("index") {
-            None => Err(CfgError::val_err("mandatory attribute \"index\" is missing")),
-            Some(s) => Ok(s)
+            None => Err(CfgError::val_err(
+                "mandatory attribute \"index\" is missing",
+            )),
+            Some(s) => Ok(s),
         }?;
 
         let index = match i32::from_str(ind_str) {
-            Err(_) => Err(CfgError::val_err("mandatory attribute \"index\" is missing")),
-            Ok(i) => Ok(i)
+            Err(_) => Err(CfgError::val_err(
+                "mandatory attribute \"index\" is missing",
+            )),
+            Ok(i) => Ok(i),
         }?;
 
         let value = el.text();
 
-        Ok(SegPart {
-            index,
-            value,
-        })
+        Ok(SegPart { index, value })
     }
 
     pub fn from_multi(el: &Element) -> Result<Vec<SegPart>, CfgError> {
@@ -119,13 +125,12 @@ impl SegPart {
                 "part" => {
                     parts.push(SegPart::from(child)?);
                 }
-                _ => continue
+                _ => continue,
             }
         }
         Ok(parts)
     }
 }
-
 
 impl MakeModelPatternCfg {
     pub fn from(el: &Element) -> Result<Box<dyn SegmentConfig + Send>, CfgError> {
@@ -181,17 +186,15 @@ impl MakeModelPatternCfg {
             }
         }
 
-        Ok(
-            Box::new(MakeModelPatternCfg {
-                parts,
-                replace_spaces,
-                default_make: def_make,
-                default_model: def_model,
-                separator,
-                case_normalization,
-                fallback,
-            })
-        )
+        Ok(Box::new(MakeModelPatternCfg {
+            parts,
+            replace_spaces,
+            default_make: def_make,
+            default_model: def_model,
+            separator,
+            case_normalization,
+            fallback,
+        }))
     }
 }
 
@@ -210,7 +213,7 @@ impl SegmentConfig for MakeModelPatternCfg {
                 builder.push_part(p);
             } else {
                 return Err(CfgError::val_err(
-                    format!("Illegal value for DevicePart: \"{}\"", part.value).as_str()
+                    format!("Illegal value for DevicePart: \"{}\"", part.value).as_str(),
                 ));
             }
         }
@@ -218,7 +221,6 @@ impl SegmentConfig for MakeModelPatternCfg {
         Ok(builder.build())
     }
 }
-
 
 impl ScreenshotPatternCfg {
     pub fn from(el: &Element) -> Result<Box<dyn SegmentConfig + Send>, CfgError> {
@@ -245,7 +247,7 @@ impl ScreenshotPatternCfg {
                         }
                     }
                 }
-                _ => continue
+                _ => continue,
             }
         }
         Ok(Box::new(match filename_pattern {
@@ -256,7 +258,7 @@ impl ScreenshotPatternCfg {
             Some(p) => ScreenshotPatternCfg {
                 value,
                 filename_pattern: Some((p, case_insensitive)),
-            }
+            },
         }))
     }
 }
@@ -265,16 +267,18 @@ impl SegmentConfig for ScreenshotPatternCfg {
     fn generate(&self) -> Result<Box<dyn PatternElement + Send>, CfgError> {
         match &self.filename_pattern {
             None => Ok(ScreenshotPattern::new(self.value.clone())),
-            Some(p) => match ScreenshotPattern::with_fname_matching(self.value.clone(),
-                                                                    p.0.as_str(),
-                                                                    p.1) {
-                Ok(r) => Ok(r),
-                Err(e) => Err(CfgError::val_err(format!("failed to load screenshot file pattern: {}", e).as_str()))
+            Some(p) => {
+                match ScreenshotPattern::with_fname_matching(self.value.clone(), p.0.as_str(), p.1)
+                {
+                    Ok(r) => Ok(r),
+                    Err(e) => Err(CfgError::val_err(
+                        format!("failed to load screenshot file pattern: {}", e).as_str(),
+                    )),
+                }
             }
         }
     }
 }
-
 
 impl DateTimePatternCfg {
     pub fn from(el: &Element) -> Result<Box<dyn SegmentConfig + Send>, CfgError> {
@@ -301,18 +305,16 @@ impl DateTimePatternCfg {
                         fallback = b;
                     }
                 }
-                _ => continue
+                _ => continue,
             }
         }
 
-        Ok(
-            Box::new(DateTimePatternCfg {
-                parts,
-                separator,
-                default_value: def_val,
-                fallback_fs_timestamp: fallback,
-            })
-        )
+        Ok(Box::new(DateTimePatternCfg {
+            parts,
+            separator,
+            default_value: def_val,
+            fallback_fs_timestamp: fallback,
+        }))
     }
 }
 
@@ -328,7 +330,7 @@ impl SegmentConfig for DateTimePatternCfg {
                 builder.push_part(p);
             } else {
                 return Err(CfgError::val_err(
-                    format!("Illegal value for DateTimePart: \"{}\"", part.value).as_str()
+                    format!("Illegal value for DateTimePart: \"{}\"", part.value).as_str(),
                 ));
             }
         }
@@ -336,7 +338,6 @@ impl SegmentConfig for DateTimePatternCfg {
         Ok(builder.build())
     }
 }
-
 
 impl SimpleFileTypePatternCfg {
     pub fn from(el: &Element) -> Result<Box<dyn SegmentConfig + Send>, CfgError> {
@@ -379,20 +380,18 @@ impl SimpleFileTypePatternCfg {
                         other = s;
                     }
                 }
-                _ => continue
+                _ => continue,
             }
         }
 
-        Ok(
-            Box::new(SimpleFileTypePatternCfg {
-                default_video: video,
-                default_picture: pic,
-                default_audio: audio,
-                default_text: text,
-                default_document: doc,
-                default_other: other,
-            })
-        )
+        Ok(Box::new(SimpleFileTypePatternCfg {
+            default_video: video,
+            default_picture: pic,
+            default_audio: audio,
+            default_text: text,
+            default_document: doc,
+            default_other: other,
+        }))
     }
 }
 
@@ -405,7 +404,109 @@ impl SegmentConfig for SimpleFileTypePatternCfg {
             .text(self.default_text.clone())
             .document(self.default_document.clone())
             .other(self.default_other.clone())
-            .build()
-        )
+            .build())
+    }
+}
+
+pub struct FilenamePatternCfg {
+    tpl: FilenamePattern,
+}
+impl SegmentConfig for FilenamePatternCfg {
+    fn generate(&self) -> Result<Box<dyn PatternElement + Send>, CfgError> {
+        Ok(self.tpl.clone_boxed())
+    }
+}
+
+impl FilenamePatternCfg {
+    const TYPE_PREFIX: &'static str = "prefix";
+    const TYPE_POSTFIX: &'static str = "postfix";
+    const TYPE_EXACT: &'static str = "exact";
+    const TYPE_REGEX: &'static str = "rx";
+    const TYPE_VALS: &'static [&'static str] = &[
+        Self::TYPE_PREFIX,
+        Self::TYPE_POSTFIX,
+        Self::TYPE_EXACT,
+        Self::TYPE_REGEX,
+    ];
+
+    fn pattern_from_val(
+        type_val: &str,
+        val: String,
+    ) -> Result<pattern::general::PatternType, CfgError> {
+        if val.is_empty() {
+            Err(CfgError::IllegalValue(CfgValueError::from_string(format!(
+                "empty filename pattern for pattern_type={}",
+                type_val
+            ))))
+        } else {
+            Ok(match type_val {
+                Self::TYPE_PREFIX => PatternType::Prefix(val),
+                Self::TYPE_POSTFIX => PatternType::Postfix(val),
+                Self::TYPE_EXACT => PatternType::Exact(val),
+                Self::TYPE_REGEX => PatternType::Regex(regex::Regex::new(&val).map_err(|_e| {
+                    CfgError::IllegalValue(CfgValueError::new(
+                        "invalid regular expression value for pattern_type=Pattern",
+                    ))
+                })?),
+                _ => unreachable!(),
+            })
+        }
+    }
+
+    pub fn from(el: &Element) -> Result<Box<dyn SegmentConfig + Send>, CfgError> {
+        let mut pat_val = None;
+        let mut seg_val = None;
+        let mut case_sensitive = false;
+        for child_element in el.children() {
+            if child_element.name() == "pattern" {
+                if let Some(cs_val) = child_element.attr("case-sensitive") {
+                    case_sensitive = cs_val.parse().map_err(|_| {
+                        CfgError::val_err("invalid value for attribute \"case-sensitive\"")
+                    })?;
+                }
+
+                let type_attr = child_element.attr("type").ok_or(CfgError::val_err(
+                    "missing attribute \"type\" of tag \"pattern\"",
+                ))?;
+                if Self::TYPE_VALS.contains(&type_attr) {
+                    if pat_val.is_none() {
+                        pat_val = Some(Self::pattern_from_val(type_attr, child_element.text())?);
+                        Ok(())
+                    } else {
+                        Err(CfgError::val_err("more than one pattern set"))
+                    }
+                } else {
+                    Err(CfgError::IllegalValue(CfgValueError::from_string(format!(
+                        "invalid pattern type: \"{}\"",
+                        type_attr
+                    ))))
+                }
+            } else if child_element.name() == "value" {
+                if seg_val.is_none() {
+                    let val = child_element.text();
+                    if val.is_empty() {
+                        Err(CfgError::val_err("empty segment value"))
+                    } else {
+                        seg_val = Some(val);
+                        Ok(())
+                    }
+                } else {
+                    Err(CfgError::val_err("duplicate segment value set"))
+                }
+            } else {
+                Err(CfgError::UnsupportedSegment(CfgValueError::from_string(
+                    format!(
+                        "unknown child tag \"{}\" for FilenamePattern",
+                        child_element.name()
+                    ),
+                )))
+            }?;
+        }
+
+        let seg_val = seg_val.ok_or(CfgError::val_err("missing segment value"))?;
+        let seg_pat = pat_val.ok_or(CfgError::val_err("missing pattern value"))?;
+        Ok(Box::new(Self {
+            tpl: FilenamePattern::with(seg_val, seg_pat, case_sensitive),
+        }))
     }
 }
