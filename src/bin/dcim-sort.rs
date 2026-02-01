@@ -59,7 +59,7 @@ fn parse_args() -> MArgs {
 
 
     let matches = App::new("dcim-sort - sort images from DCIM folders")
-        .version("0.1.0")
+        .version("1.0.0")
         .author("MCL")
         .about("Sort images from (unintuitive) DCIM file structures")
         .setting(AppSettings::UnifiedHelpMessage)
